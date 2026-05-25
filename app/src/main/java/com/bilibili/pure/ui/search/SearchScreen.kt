@@ -146,7 +146,11 @@ fun SearchVideoCard(
     video: SearchVideoItem,
     onClick: () -> Unit
 ) {
-    val imageUrl = if (video.pic.startsWith("//")) "https:${video.pic}" else video.pic
+    val imageUrl = when {
+        video.pic.startsWith("//") -> "https:${video.pic}"
+        video.pic.startsWith("http://") -> "https:${video.pic.removePrefix("http:")}"
+        else -> video.pic
+    }
 
     Card(
         modifier = Modifier

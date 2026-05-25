@@ -1,5 +1,7 @@
 package com.bilibili.pure.data.api
 
+import android.os.Build
+import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.model.*
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -45,11 +47,12 @@ interface BilibiliApi {
 
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
-        private const val BUV_ID = "BUVIV3ID-64B70F9F-9C07-4873-8A58-00427079E5E3"
+        lateinit var buvid3: String
 
         val httpClient: OkHttpClient by lazy {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.HEADERS
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
+                        else HttpLoggingInterceptor.Level.NONE
             }
 
             OkHttpClient.Builder()
@@ -66,9 +69,9 @@ interface BilibiliApi {
                     if (isCdn) {
                         builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     } else {
-                        builder.header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Xiaomi 24117RK2CC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                        builder.header("User-Agent", "Mozilla/5.0 (Linux; Android ${Build.VERSION.SDK_INT}; ${Build.MANUFACTURER} ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
                             .header("Origin", "https://www.bilibili.com")
-                            .header("Cookie", "buvid3=$BUV_ID; buvid4=$BUV_ID")
+                            .header("Cookie", "buvid3=$buvid3; buvid4=$buvid3")
                             .header("Accept", "application/json, text/plain, */*")
                             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                             .header("sec-ch-ua", "\"Google Chrome\";v=\"120\", \"Not?A_Brand\";v=\"8\"")

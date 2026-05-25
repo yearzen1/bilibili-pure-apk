@@ -4,12 +4,16 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.util.Log
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.view.ViewGroup
+import android.view.WindowInsetsController
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -19,15 +23,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bilibili.pure.BilibiliApp
+import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,15 +41,15 @@ import com.bilibili.pure.data.api.BilibiliApi
 fun PlayerScreen(
     bvid: String,
     onBack: () -> Unit,
-    viewModel: PlayerViewModel = viewModel()
+    vm: PlayerViewModel = viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
     var isFullscreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(bvid) {
-        Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
-        viewModel.load(bvid)
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
+        vm.load(bvid)
     }
 
     val dataSourceFactory = remember {
@@ -59,7 +65,7 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
             player.run {
                 playWhenReady = false
                 stop()
@@ -70,7 +76,7 @@ fun PlayerScreen(
 
     LaunchedEffect(uiState.videoUrl) {
         uiState.videoUrl?.let { url ->
-            Log.d(BilibiliApp.TAG, "PlayerScreen: preparing media url=${url.take(80)}...")
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: preparing media url=${url.take(80)}...")
             val mediaItem = MediaItem.fromUri(url)
             val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                 .createMediaSource(mediaItem)
@@ -84,7 +90,7 @@ fun PlayerScreen(
         isFullscreen = !isFullscreen
         if (isFullscreen) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                activity.window.insetsController?.hide(WindowInsets.Type.systemBars())
+                activity.window.insetsController?.hide(android.view.WindowInsets.Type.systemBars())
                 activity.window.insetsController?.systemBarsBehavior =
                     WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
@@ -98,7 +104,7 @@ fun PlayerScreen(
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                activity.window.insetsController?.show(WindowInsets.Type.systemBars())
+                activity.window.insetsController?.show(android.view.WindowInsets.Type.systemBars())
             } else {
                 @Suppress("DEPRECATION")
                 activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
@@ -173,7 +179,7 @@ fun PlayerScreen(
                             val selected = page.cid == uiState.currentPage?.cid
                             FilterChip(
                                 selected = selected,
-                                onClick = { if (!selected) viewModel.selectPage(page) },
+                                onClick = { if (!selected) vm.selectPage(page) },
                                 label = {
                                     Text(
                                         if (page.part.isNotEmpty()) page.part

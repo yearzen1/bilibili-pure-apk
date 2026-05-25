@@ -17,6 +17,12 @@ import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.ui.search.formatCount
 
+private fun fixPic(url: String): String = when {
+    url.startsWith("//") -> "https:$url"
+    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
+    else -> url
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
@@ -86,7 +92,7 @@ private fun DetailContent(
     ) {
         item {
             AsyncImage(
-                model = videoInfo.pic,
+                model = fixPic(videoInfo.pic),
                 contentDescription = videoInfo.title,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -105,7 +111,7 @@ private fun DetailContent(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
-                    model = videoInfo.owner.face,
+                    model = fixPic(videoInfo.owner.face),
                     contentDescription = videoInfo.owner.name,
                     modifier = Modifier.size(40.dp),
                     contentScale = ContentScale.Crop
@@ -160,7 +166,7 @@ private fun DetailContent(
                 ) {
                     Row(modifier = Modifier.padding(8.dp)) {
                         AsyncImage(
-                            model = comment.member.avatar,
+                            model = fixPic(comment.member.avatar),
                             contentDescription = comment.member.uname,
                             modifier = Modifier.size(32.dp),
                             contentScale = ContentScale.Crop

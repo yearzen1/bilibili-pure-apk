@@ -5,12 +5,11 @@
 
     <application
         android:name=".BilibiliApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="BiliPure"
         android:supportsRtl="true"
-        android:theme="@style/Theme.BilibiliPure"
-        android:usesCleartextTraffic="true">
+        android:theme="@style/Theme.BilibiliPure">
 
         <activity
             android:name=".MainActivity"
