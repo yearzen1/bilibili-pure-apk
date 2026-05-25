@@ -10,3 +10,6 @@
 local.properties
 app/build/
 /apk/
+/android-sdk/
+AGENTS.md
+5.26prompt.md

@@ -99,3 +99,18 @@ data class CommentCursor(
     @SerializedName("next") val next: Int = 0,
     @SerializedName("is_end") val isEnd: Boolean = true
 )
+
+data class PlayUrlInfo(
+    val quality: Int,
+    val format: String,
+    val timelength: Long,
+    val accept_quality: List<Int>? = null,
+    val accept_description: List<String>? = null,
+    val durl: List<DurlItem>? = null
+)
+
+data class DurlItem(
+    val url: String,
+    val length: Long,
+    val size: Long
+)

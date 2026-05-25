@@ -27,7 +27,7 @@ fun DetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(bvid) {
+    LaunchedEffect(Unit) {
         viewModel.load(bvid)
     }
 

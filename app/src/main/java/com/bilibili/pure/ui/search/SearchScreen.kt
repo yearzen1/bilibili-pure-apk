@@ -1,9 +1,12 @@
 package com.bilibili.pure.ui.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,24 +25,49 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var searchActive by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalItems = listState.layoutInfo.totalItemsCount
+            lastVisible >= totalItems - 3 && totalItems > 0 && uiState.hasMore && !uiState.isLoadingMore
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            viewModel.loadMore()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchBar(
             query = uiState.query,
             onQueryChange = { viewModel.onQueryChange(it) },
-            onSearch = { viewModel.search() },
+            onSearch = {
+                searchActive = false
+                viewModel.search()
+            },
             active = searchActive,
             onActiveChange = { searchActive = it },
             modifier = Modifier.fillMaxWidth()
         ) {}
 
+        if (uiState.results.isNotEmpty()) {
+            SortSelector(
+                selected = uiState.sortBy,
+                onSelect = { viewModel.setSortBy(it) }
+            )
+        }
+
         when {
-            uiState.isLoading -> {
+            uiState.isLoading && uiState.results.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
-            uiState.error != null -> {
+            uiState.error != null && uiState.results.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("加载失败：${uiState.error}")
                 }
@@ -51,18 +79,51 @@ fun SearchScreen(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(uiState.results) { item ->
+                    items(uiState.results, key = { it.bvid }) { item ->
                         SearchVideoCard(
                             video = item,
                             onClick = { onVideoClick(item.bvid) }
                         )
                     }
+                    if (uiState.isLoadingMore) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SortSelector(
+    selected: SearchSortOption,
+    onSelect: (SearchSortOption) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SearchSort.options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(option.label) }
+            )
         }
     }
 }
@@ -72,6 +133,8 @@ fun SearchVideoCard(
     video: SearchVideoItem,
     onClick: () -> Unit
 ) {
+    val imageUrl = if (video.pic.startsWith("//")) "https:${video.pic}" else video.pic
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -80,7 +143,7 @@ fun SearchVideoCard(
     ) {
         Row(modifier = Modifier.padding(8.dp)) {
             AsyncImage(
-                model = video.pic,
+                model = imageUrl,
                 contentDescription = video.title,
                 modifier = Modifier
                     .size(width = 140.dp, height = 88.dp),
