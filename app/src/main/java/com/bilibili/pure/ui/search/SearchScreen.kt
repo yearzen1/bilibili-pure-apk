@@ -7,11 +7,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -24,7 +31,6 @@ fun SearchScreen(
     viewModel: SearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var searchActive by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     val shouldLoadMore by remember {
@@ -42,17 +48,24 @@ fun SearchScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SearchBar(
-            query = uiState.query,
-            onQueryChange = { viewModel.onQueryChange(it) },
-            onSearch = {
-                searchActive = false
-                viewModel.search()
+        OutlinedTextField(
+            value = uiState.query,
+            onValueChange = { viewModel.onQueryChange(it) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            placeholder = { Text("搜索") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (uiState.query.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.onQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "清除")
+                    }
+                }
             },
-            active = searchActive,
-            onActiveChange = { searchActive = it },
-            modifier = Modifier.fillMaxWidth()
-        ) {}
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { viewModel.search() }),
+            shape = RoundedCornerShape(24.dp)
+        )
 
         if (uiState.results.isNotEmpty()) {
             SortSelector(
