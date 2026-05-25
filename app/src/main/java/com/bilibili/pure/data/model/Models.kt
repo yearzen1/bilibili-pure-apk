@@ -1,0 +1,101 @@
+package com.bilibili.pure.data.model
+
+import com.google.gson.annotations.SerializedName
+
+data class ApiResponse<T>(
+    val code: Int,
+    val message: String,
+    val data: T?,
+    val ttl: Int = 0
+)
+
+data class SearchResult(
+    val result: List<SearchVideoItem>?,
+    val page: Int = 1,
+    val pagesize: Int = 20,
+    @SerializedName("numResults") val totalResults: Int = 0,
+    @SerializedName("numPages") val totalPages: Int = 0
+)
+
+data class SearchVideoItem(
+    val bvid: String,
+    val aid: Long,
+    val title: String,
+    val pic: String,
+    val author: String,
+    @SerializedName("play") val playCount: Long,
+    @SerializedName("video_review") val danmakuCount: Long,
+    val pubdate: Long,
+    val duration: String,
+    val description: String,
+    @SerializedName("upic") val authorAvatar: String? = null,
+    @SerializedName("mid") val authorId: Long = 0
+)
+
+data class VideoInfo(
+    val bvid: String,
+    val aid: Long,
+    val title: String,
+    val pic: String,
+    val desc: String,
+    val owner: VideoOwner,
+    val stat: VideoStat,
+    val cid: Long,
+    val tid: Long = 0,
+    val tname: String = "",
+    val videos: Int = 1,
+    val pubdate: Long = 0,
+    val pages: List<VideoPage>? = null
+)
+
+data class VideoOwner(
+    val mid: Long,
+    val name: String,
+    val face: String
+)
+
+data class VideoStat(
+    val view: Long = 0,
+    val like: Long = 0,
+    val coin: Long = 0,
+    val favorite: Long = 0,
+    val danmaku: Long = 0,
+    val reply: Long = 0,
+    val share: Long = 0
+)
+
+data class VideoPage(
+    val cid: Long,
+    val page: Int,
+    val part: String,
+    val duration: Long
+)
+
+data class CommentList(
+    val replies: List<CommentItem>?,
+    val cursor: CommentCursor? = null
+)
+
+data class CommentItem(
+    val rpid: Long,
+    val content: CommentContent,
+    val member: CommentMember,
+    val like: Int = 0,
+    val rcount: Int = 0,
+    val ctime: Long = 0
+)
+
+data class CommentContent(
+    val message: String
+)
+
+data class CommentMember(
+    val uname: String,
+    val avatar: String
+)
+
+data class CommentCursor(
+    @SerializedName("prev") val prev: Int = 0,
+    @SerializedName("next") val next: Int = 0,
+    @SerializedName("is_end") val isEnd: Boolean = true
+)
