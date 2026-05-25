@@ -21,14 +21,17 @@ fun SearchScreen(
     viewModel: SearchViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var searchActive by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchBar(
             query = uiState.query,
             onQueryChange = { viewModel.onQueryChange(it) },
             onSearch = { viewModel.search() },
+            active = searchActive,
+            onActiveChange = { searchActive = it },
             modifier = Modifier.fillMaxWidth()
-        )
+        ) {}
 
         when {
             uiState.isLoading -> {
