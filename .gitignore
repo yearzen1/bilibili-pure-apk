@@ -13,3 +13,6 @@ app/build/
 /android-sdk/
 AGENTS.md
 5.26prompt.md
+.github/
+PLAN.md
+setup.ps1
