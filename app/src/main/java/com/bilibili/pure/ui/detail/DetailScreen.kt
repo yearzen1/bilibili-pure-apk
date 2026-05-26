@@ -16,6 +16,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.ui.search.formatCount
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private fun fixPic(url: String): String = when {
     url.startsWith("//") -> "https:$url"
@@ -140,13 +143,35 @@ private fun DetailContent(
         }
 
         item {
+            val dateStr = if (videoInfo.pubdate > 0L) {
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
+            } else ""
             Text(
-                text = videoInfo.desc,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 5,
-                overflow = TextOverflow.Ellipsis
+                text = "发布日期：$dateStr",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        item {
+            var expanded by remember { mutableStateOf(false) }
+            var isTruncated by remember { mutableStateOf(false) }
+
+            Column {
+                Text(
+                    text = videoInfo.desc,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
+                )
+                if (isTruncated) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(if (expanded) "收起" else "展开全部")
+                    }
+                }
+            }
         }
 
         item {
