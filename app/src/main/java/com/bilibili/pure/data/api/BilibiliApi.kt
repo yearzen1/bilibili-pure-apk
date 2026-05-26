@@ -3,8 +3,10 @@ package com.bilibili.pure.data.api
 import android.os.Build
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.model.*
+import okhttp3.ConnectionSpec
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -25,13 +27,22 @@ interface BilibiliApi {
     @GET("x/web-interface/view")
     suspend fun getVideoInfo(@Query("bvid") bvid: String): ApiResponse<VideoInfo>
 
-    @GET("x/v2/comment/main")
+    @GET("x/v2/reply/main")
     suspend fun getComments(
         @Query("type") type: Int = 1,
         @Query("oid") oid: Long,
         @Query("mode") mode: Int = 3,
         @Query("ps") pageSize: Int = 20,
         @Query("next") next: Int = 0
+    ): ApiResponse<CommentList>
+
+    @GET("x/v2/reply/reply")
+    suspend fun getReplies(
+        @Query("type") type: Int = 1,
+        @Query("oid") oid: Long,
+        @Query("root") root: Long,
+        @Query("ps") pageSize: Int = 20,
+        @Query("pn") pn: Int = 1
     ): ApiResponse<CommentList>
 
     @GET("x/player/playurl")
@@ -48,16 +59,26 @@ interface BilibiliApi {
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String
+        var loginCookies: String = ""
+
+        fun setLoginCookies(sessdata: String, biliJct: String, dedeUserId: String) {
+            loginCookies = "SESSDATA=$sessdata; bili_jct=$biliJct; DedeUserID=$dedeUserId"
+        }
 
         val httpClient: OkHttpClient by lazy {
             val logging = HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                         else HttpLoggingInterceptor.Level.NONE
             }
 
             OkHttpClient.Builder()
-                .addInterceptor(logging)
                 .protocols(listOf(Protocol.HTTP_1_1))
+                .connectionSpecs(listOf(
+                    ConnectionSpec.Builder(ConnectionSpec.RESTRICTED_TLS)
+                        .tlsVersions(TlsVersion.TLS_1_2)
+                        .supportsTlsExtensions(true)
+                        .build()
+                ))
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
@@ -71,7 +92,12 @@ interface BilibiliApi {
                     } else {
                         builder.header("User-Agent", "Mozilla/5.0 (Linux; Android ${Build.VERSION.SDK_INT}; ${Build.MANUFACTURER} ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
                             .header("Origin", "https://www.bilibili.com")
-                            .header("Cookie", "buvid3=$buvid3; buvid4=$buvid3")
+                            .header("Cookie", buildString {
+                                append("buvid3=$buvid3; buvid4=$buvid3")
+                                if (loginCookies.isNotEmpty()) {
+                                    append("; $loginCookies")
+                                }
+                            })
                             .header("Accept", "application/json, text/plain, */*")
                             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                             .header("sec-ch-ua", "\"Google Chrome\";v=\"120\", \"Not?A_Brand\";v=\"8\"")
@@ -83,6 +109,7 @@ interface BilibiliApi {
                     }
                     chain.proceed(builder.build())
                 }
+                .addInterceptor(logging)
                 .build()
         }
 

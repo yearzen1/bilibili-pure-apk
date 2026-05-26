@@ -114,3 +114,16 @@ data class DurlItem(
     val length: Long,
     val size: Long
 )
+
+data class QRLoginData(
+    val url: String,
+    @SerializedName("qrcode_key") val qrcodeKey: String
+)
+
+data class QRPollData(
+    val url: String? = null,
+    @SerializedName("refresh_token") val refreshToken: String? = null,
+    val timestamp: Long = 0,
+    val code: Int? = null,
+    val message: String? = null
+)

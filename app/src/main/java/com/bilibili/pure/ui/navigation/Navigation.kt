@@ -17,6 +17,7 @@ sealed class Screen(
 object Routes {
     const val DETAIL = "detail/{bvid}"
     const val PLAYER = "player/{bvid}"
+    const val LOGIN = "login"
 
     fun detail(bvid: String) = "detail/$bvid"
     fun player(bvid: String) = "player/$bvid"

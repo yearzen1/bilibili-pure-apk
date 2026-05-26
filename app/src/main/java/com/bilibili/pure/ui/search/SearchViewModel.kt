@@ -66,7 +66,7 @@ class SearchViewModel(
                 .onSuccess { (results, totalPages) ->
                     Log.d(BilibiliApp.TAG, "search success: ${results.size} results, pages=$totalPages")
                     _uiState.value = _uiState.value.copy(
-                        results = results,
+                        results = results.distinctBy { it.bvid },
                         isLoading = false,
                         currentPage = 1,
                         hasMore = totalPages > 1
@@ -82,6 +82,22 @@ class SearchViewModel(
         }
     }
 
+    fun nextSort() {
+        val current = _uiState.value.sortBy
+        val index = SearchSort.options.indexOf(current)
+        if (index < SearchSort.options.lastIndex) {
+            setSortBy(SearchSort.options[index + 1])
+        }
+    }
+
+    fun prevSort() {
+        val current = _uiState.value.sortBy
+        val index = SearchSort.options.indexOf(current)
+        if (index > 0) {
+            setSortBy(SearchSort.options[index - 1])
+        }
+    }
+
     fun loadMore() {
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMore) return
@@ -92,8 +108,10 @@ class SearchViewModel(
             _uiState.value = _uiState.value.copy(isLoadingMore = true)
             repository.search(state.query, page = nextPage, order = state.sortBy.value)
                 .onSuccess { (results, totalPages) ->
+                    val existingBvids = _uiState.value.results.map { it.bvid }.toSet()
+                    val deduped = results.filter { it.bvid !in existingBvids }
                     _uiState.value = _uiState.value.copy(
-                        results = _uiState.value.results + results,
+                        results = _uiState.value.results + deduped,
                         isLoadingMore = false,
                         currentPage = nextPage,
                         hasMore = nextPage < totalPages

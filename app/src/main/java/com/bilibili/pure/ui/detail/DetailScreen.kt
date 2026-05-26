@@ -1,10 +1,14 @@
 package com.bilibili.pure.ui.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +23,8 @@ import com.bilibili.pure.ui.search.formatCount
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private fun fixPic(url: String): String = when {
     url.startsWith("//") -> "https:$url"
@@ -74,7 +80,13 @@ fun DetailScreen(
                     videoInfo = uiState.videoInfo!!,
                     comments = uiState.comments,
                     onPlay = { onPlay(bvid) },
-                    modifier = Modifier.padding(padding)
+                    modifier = Modifier.padding(padding),
+                    replyThreads = uiState.replyThreads,
+                    expandedReplies = uiState.expandedReplies,
+                    onToggleReplies = { rpid -> viewModel.toggleReplies(uiState.videoInfo!!.aid, rpid) },
+                    loadingMore = uiState.loadingMore,
+                    hasMoreComments = uiState.hasMoreComments,
+                    onLoadMoreComments = { viewModel.loadMoreComments(uiState.videoInfo!!.aid) }
                 )
             }
         }
@@ -86,139 +98,282 @@ private fun DetailContent(
     videoInfo: VideoInfo,
     comments: List<com.bilibili.pure.data.model.CommentItem>?,
     onPlay: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    replyThreads: Map<Long, ReplyThread> = emptyMap(),
+    expandedReplies: Set<Long> = emptySet(),
+    onToggleReplies: (rpid: Long) -> Unit = {},
+    loadingMore: Boolean = false,
+    hasMoreComments: Boolean = true,
+    onLoadMoreComments: () -> Unit = {}
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            AsyncImage(
-                model = fixPic(videoInfo.pic),
-                contentDescription = videoInfo.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                contentScale = ContentScale.Crop
-            )
-        }
+    val listState = rememberLazyListState()
 
-        item {
-            Text(
-                text = videoInfo.title,
-                style = MaterialTheme.typography.headlineSmall
-            )
+    val nearBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = layoutInfo.totalItemsCount
+            total > 0 && lastVisible >= total - 5
         }
+    }
 
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    LaunchedEffect(nearBottom, hasMoreComments, loadingMore, comments) {
+        if (nearBottom && hasMoreComments && !loadingMore && comments != null) {
+            delay(500)
+            if (hasMoreComments && !loadingMore) {
+                onLoadMoreComments()
+            }
+        }
+    }
+
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex >= 6 }
+    }
+    val showScrollToComments by remember {
+        derivedStateOf { listState.firstVisibleItemIndex < 4 }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
                 AsyncImage(
-                    model = fixPic(videoInfo.owner.face),
-                    contentDescription = videoInfo.owner.name,
-                    modifier = Modifier.size(40.dp),
+                    model = fixPic(videoInfo.pic),
+                    contentDescription = videoInfo.title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
                     contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = videoInfo.owner.name,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = onPlay) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("播放")
-                }
             }
-        }
 
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatChip("播放", formatCount(videoInfo.stat.view))
-                StatChip("点赞", formatCount(videoInfo.stat.like))
-                StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
-                StatChip("评论", formatCount(videoInfo.stat.reply))
-            }
-        }
-
-        item {
-            val dateStr = if (videoInfo.pubdate > 0L) {
-                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
-            } else ""
-            Text(
-                text = "发布日期：$dateStr",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        item {
-            var expanded by remember { mutableStateOf(false) }
-            var isTruncated by remember { mutableStateOf(false) }
-
-            Column {
+            item {
                 Text(
-                    text = videoInfo.desc,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (expanded) Int.MAX_VALUE else 3,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
+                    text = videoInfo.title,
+                    style = MaterialTheme.typography.headlineSmall
                 )
-                if (isTruncated) {
-                    TextButton(onClick = { expanded = !expanded }) {
-                        Text(if (expanded) "收起" else "展开全部")
+            }
+
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = fixPic(videoInfo.owner.face),
+                        contentDescription = videoInfo.owner.name,
+                        modifier = Modifier.size(40.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = videoInfo.owner.name,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Button(onClick = onPlay) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("播放")
                     }
                 }
             }
-        }
 
-        item {
-            Text(
-                text = "评论 (${videoInfo.stat.reply})",
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    StatChip("播放", formatCount(videoInfo.stat.view))
+                    StatChip("点赞", formatCount(videoInfo.stat.like))
+                    StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
+                    StatChip("评论", formatCount(videoInfo.stat.reply))
+                }
+            }
 
-        if (comments != null) {
-            items(comments) { comment ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+            item {
+                val dateStr = if (videoInfo.pubdate > 0L) {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
+                } else ""
+                Text(
+                    text = "发布日期：$dateStr",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item {
+                var expanded by remember { mutableStateOf(false) }
+                var isTruncated by remember { mutableStateOf(false) }
+
+                Column {
+                    Text(
+                        text = videoInfo.desc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 3,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
                     )
-                ) {
-                    Row(modifier = Modifier.padding(8.dp)) {
-                        AsyncImage(
-                            model = fixPic(comment.member.avatar),
-                            contentDescription = comment.member.uname,
-                            modifier = Modifier.size(32.dp),
-                            contentScale = ContentScale.Crop
+                    if (isTruncated) {
+                        TextButton(onClick = { expanded = !expanded }) {
+                            Text(if (expanded) "收起" else "展开全部")
+                        }
+                    }
+                }
+            }
+
+            item(key = "comments_header") {
+                Text(
+                    text = "评论 (${videoInfo.stat.reply})",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            if (comments != null) {
+                comments.forEach { comment ->
+                    val rpid = comment.rpid
+                    val thread = replyThreads[rpid]
+                    val isExpanded = rpid in expandedReplies
+
+                    item(key = rpid) {
+                        CommentCard(
+                            comment = comment,
+                            thread = thread,
+                            isExpanded = isExpanded,
+                            onToggle = { onToggleReplies(rpid) }
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = comment.member.uname,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = comment.content.message,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            if (comment.rcount > 0) {
-                                Text(
-                                    text = "${comment.rcount} 条回复",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                    }
+
+                    if (isExpanded && thread != null) {
+                        thread.items.forEach { reply ->
+                            item(key = "r_$rpid:${reply.rpid}") {
+                                ReplyRow(reply = reply)
+                            }
+                        }
+                        item(key = "collapse_$rpid") {
+                            TextButton(
+                                onClick = { onToggleReplies(rpid) },
+                                modifier = Modifier.padding(start = 32.dp)
+                            ) {
+                                Text("收起回复")
                             }
                         }
                     }
                 }
             }
+
+            item(key = "bottom") {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    when {
+                        loadingMore -> CircularProgressIndicator(Modifier.size(24.dp))
+                        hasMoreComments -> TextButton(onClick = onLoadMoreComments) {
+                            Text("加载更多评论", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showScrollToTop) {
+            FloatingActionButton(
+                onClick = { scope.launch { listState.scrollToItem(0) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
+            }
+        }
+
+        if (showScrollToComments) {
+            FloatingActionButton(
+                onClick = { scope.launch { listState.scrollToItem(6) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "跳至评论区")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentCard(
+    comment: com.bilibili.pure.data.model.CommentItem,
+    thread: ReplyThread?,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (comment.rcount > 0) Modifier.clickable { onToggle() } else Modifier),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row {
+                AsyncImage(
+                    model = fixPic(comment.member.avatar),
+                    contentDescription = comment.member.uname,
+                    modifier = Modifier.size(32.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = comment.member.uname,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = comment.content.message,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (comment.rcount > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = when {
+                                thread?.isLoading == true -> "加载中..."
+                                thread?.hasMore == false && isExpanded -> "${comment.rcount} 条回复"
+                                isExpanded -> "收起回复"
+                                else -> "${comment.rcount} 条回复"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem) {
+    Row(modifier = Modifier.padding(start = 32.dp)) {
+        AsyncImage(
+            model = fixPic(reply.member.avatar),
+            contentDescription = reply.member.uname,
+            modifier = Modifier.size(24.dp),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = reply.member.uname,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = reply.content.message,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

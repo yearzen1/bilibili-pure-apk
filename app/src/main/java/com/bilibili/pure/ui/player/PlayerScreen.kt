@@ -90,6 +90,18 @@ fun PlayerScreen(
                 stop()
                 release()
             }
+            if (isFullscreen) {
+                val activity = context as? Activity
+                if (activity != null) {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        activity.window.insetsController?.show(android.view.WindowInsets.Type.systemBars())
+                    } else {
+                        @Suppress("DEPRECATION")
+                        activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                    }
+                }
+            }
         }
     }
 
@@ -128,7 +140,7 @@ fun PlayerScreen(
                 @Suppress("DEPRECATION")
                 activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             }
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
@@ -158,7 +170,6 @@ fun PlayerScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            player.stop()
                             onBack()
                         }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -319,107 +330,111 @@ private fun PlayerContent(
                                 }
                             }
 
-                            if (isFullscreen) {
-                                var touchStartX = 0f
-                                var touchStartY = 0f
-                                var isOnLeftEdge = false
-                                var isOnRightEdge = false
-                                var isVerticalSwipe = false
+                            var touchStartX = 0f
+                            var touchStartY = 0f
+                            var isOnLeftEdge = false
+                            var isOnRightEdge = false
+                            var isVerticalSwipe = false
 
-                                val gestureDetector = GestureDetector(
-                                    ctx,
-                                    object : GestureDetector.SimpleOnGestureListener() {
-                                        override fun onLongPress(e: MotionEvent) {
-                                            val p = exoPlayer as? ExoPlayer ?: return
-                                            currentSpeed = when {
-                                                currentSpeed < 1.5f -> 2.0f
-                                                currentSpeed < 2.5f -> 3.0f
-                                                else -> 1.0f
-                                            }
-                                            p.setPlaybackSpeed(currentSpeed)
-                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            val gestureDetector = GestureDetector(
+                                ctx,
+                                object : GestureDetector.SimpleOnGestureListener() {
+                                    override fun onLongPress(e: MotionEvent) {
+                                        val p = exoPlayer as? ExoPlayer ?: return
+                                        currentSpeed = when {
+                                            currentSpeed < 1.5f -> 2.0f
+                                            currentSpeed < 2.5f -> 3.0f
+                                            else -> 1.0f
                                         }
+                                        p.setPlaybackSpeed(currentSpeed)
+                                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                                     }
-                                )
 
-                                view.setOnTouchListener { _, event ->
-                                    gestureDetector.onTouchEvent(event)
+                                    override fun onDoubleTap(e: MotionEvent): Boolean {
+                                        val p = exoPlayer as? ExoPlayer ?: return true
+                                        if (p.isPlaying) p.pause() else p.play()
+                                        return true
+                                    }
+                                }
+                            )
 
-                                    when (event.actionMasked) {
-                                        MotionEvent.ACTION_DOWN -> {
-                                            touchStartX = event.x
-                                            touchStartY = event.y
-                                            val w = view.width
-                                            isOnLeftEdge = w > 0 && event.x < w * 0.3f
-                                            isOnRightEdge = w > 0 && event.x > w * 0.7f
-                                            isVerticalSwipe = isOnLeftEdge || isOnRightEdge
-                                            false
-                                        }
-                                        MotionEvent.ACTION_MOVE -> {
-                                            if (isVerticalSwipe) {
-                                                val dy = kotlin.math.abs(event.y - touchStartY)
-                                                val dx = kotlin.math.abs(event.x - touchStartX)
-                                                if (dy > dx && dy > 5f) {
-                                                    if (isOnLeftEdge && !showBrightnessOverlay) {
-                                                        showBrightnessOverlay = true
-                                                        val activity = ctx as? Activity
-                                                        if (activity != null) {
-                                                            val b = activity.window.attributes.screenBrightness
-                                                            brightnessOverlayValue = if (b < 0f) 0.5f else b
-                                                        }
+                            view.setOnTouchListener { _, event ->
+                                gestureDetector.onTouchEvent(event)
+
+                                when (event.actionMasked) {
+                                    MotionEvent.ACTION_DOWN -> {
+                                        touchStartX = event.x
+                                        touchStartY = event.y
+                                        val w = view.width
+                                        isOnLeftEdge = w > 0 && event.x < w * 0.3f
+                                        isOnRightEdge = w > 0 && event.x > w * 0.7f
+                                        isVerticalSwipe = isOnLeftEdge || isOnRightEdge
+                                        false
+                                    }
+                                    MotionEvent.ACTION_MOVE -> {
+                                        if (isVerticalSwipe) {
+                                            val dy = kotlin.math.abs(event.y - touchStartY)
+                                            val dx = kotlin.math.abs(event.x - touchStartX)
+                                            if (dy > dx && dy > 5f) {
+                                                if (isOnLeftEdge && !showBrightnessOverlay) {
+                                                    showBrightnessOverlay = true
+                                                    val activity = ctx as? Activity
+                                                    if (activity != null) {
+                                                        val b = activity.window.attributes.screenBrightness
+                                                        brightnessOverlayValue = if (b < 0f) 0.5f else b
                                                     }
-                                                    if (isOnRightEdge && !showVolumeOverlay) {
-                                                        showVolumeOverlay = true
-                                                        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                                                        if (audioManager != null) {
-                                                            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                                            val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                                                            volumeOverlayValue = if (max > 0) cur.toFloat() / max else 0f
-                                                        }
-                                                    }
-                                                    val delta = (touchStartY - event.y) / view.height
-                                                    if (isOnLeftEdge) {
-                                                        val activity = ctx as? Activity
-                                                        if (activity != null) {
-                                                            val lp = activity.window.attributes
-                                                            val current = lp.screenBrightness
-                                                            val newB = if (current < 0f) 0.5f + delta else current + delta
-                                                            lp.screenBrightness = newB.coerceIn(0.01f, 1.0f)
-                                                            activity.window.attributes = lp
-                                                            brightnessOverlayValue = newB.coerceIn(0.01f, 1.0f)
-                                                        }
-                                                    } else {
-                                                        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                                                        if (audioManager != null) {
-                                                            val maxV = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                                            val curV = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                                                            val newV = (curV + (delta * maxV).toInt()).coerceIn(0, maxV)
-                                                            if (newV != curV) {
-                                                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
-                                                            }
-                                                            volumeOverlayValue = newV.toFloat() / maxV
-                                                        }
-                                                    }
-                                                    touchStartY = event.y
-                                                    return@setOnTouchListener true
                                                 }
+                                                if (isOnRightEdge && !showVolumeOverlay) {
+                                                    showVolumeOverlay = true
+                                                    val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                    if (audioManager != null) {
+                                                        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                        val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                        volumeOverlayValue = if (max > 0) cur.toFloat() / max else 0f
+                                                    }
+                                                }
+                                                val delta = (touchStartY - event.y) / view.height
+                                                if (isOnLeftEdge) {
+                                                    val activity = ctx as? Activity
+                                                    if (activity != null) {
+                                                        val lp = activity.window.attributes
+                                                        val current = lp.screenBrightness
+                                                        val newB = if (current < 0f) 0.5f + delta else current + delta
+                                                        lp.screenBrightness = newB.coerceIn(0.01f, 1.0f)
+                                                        activity.window.attributes = lp
+                                                        brightnessOverlayValue = newB.coerceIn(0.01f, 1.0f)
+                                                    }
+                                                } else {
+                                                    val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                    if (audioManager != null) {
+                                                        val maxV = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                        val curV = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                        val newV = (curV + (delta * maxV).toInt()).coerceIn(0, maxV)
+                                                        if (newV != curV) {
+                                                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
+                                                        }
+                                                        volumeOverlayValue = newV.toFloat() / maxV
+                                                    }
+                                                }
+                                                touchStartY = event.y
+                                                return@setOnTouchListener true
                                             }
-                                            false
                                         }
-                                        MotionEvent.ACTION_UP -> {
-                                            if (currentSpeed > 1.0f) {
-                                                showSpeedToast = true
-                                                currentSpeed = 1.0f
-                                                (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(1.0f)
-                                            }
-                                            if (showBrightnessOverlay || showVolumeOverlay) {
-                                                overlayDismissKey++
-                                            }
-                                            isVerticalSwipe = false
-                                            false
-                                        }
-                                        else -> false
+                                        false
                                     }
+                                    MotionEvent.ACTION_UP -> {
+                                        if (currentSpeed > 1.0f) {
+                                            showSpeedToast = true
+                                            currentSpeed = 1.0f
+                                            (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(1.0f)
+                                        }
+                                        if (showBrightnessOverlay || showVolumeOverlay) {
+                                            overlayDismissKey++
+                                        }
+                                        isVerticalSwipe = false
+                                        false
+                                    }
+                                    else -> false
                                 }
                             }
                         }

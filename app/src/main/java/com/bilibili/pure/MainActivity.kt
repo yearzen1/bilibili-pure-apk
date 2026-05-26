@@ -3,6 +3,7 @@ package com.bilibili.pure
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +17,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bilibili.pure.ui.detail.DetailScreen
+import com.bilibili.pure.ui.login.LoginScreen
 import com.bilibili.pure.ui.navigation.Routes
 import com.bilibili.pure.ui.navigation.Screen
 import com.bilibili.pure.ui.navigation.bottomNavItems
@@ -87,7 +89,9 @@ fun MainScreen() {
             }
 
             composable(Screen.Profile.route) {
-                ProfileScreen()
+                ProfileScreen(onLoginClick = {
+                    navController.navigate(Routes.LOGIN)
+                })
             }
 
             composable(
@@ -104,12 +108,24 @@ fun MainScreen() {
 
             composable(
                 route = Routes.PLAYER,
-                arguments = listOf(navArgument("bvid") { type = NavType.StringType })
+                arguments = listOf(navArgument("bvid") { type = NavType.StringType }),
+                popExitTransition = { slideOutHorizontally { it } }
             ) { backStackEntry ->
                 val bvid = backStackEntry.arguments?.getString("bvid") ?: return@composable
                 PlayerScreen(
                     bvid = bvid,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(route = Routes.LOGIN) {
+                LoginScreen(
+                    onBack = { navController.popBackStack() },
+                    onLoginSuccess = {
+                        navController.navigate(Screen.Profile.route) {
+                            popUpTo(Routes.LOGIN) { inclusive = true }
+                        }
+                    }
                 )
             }
         }

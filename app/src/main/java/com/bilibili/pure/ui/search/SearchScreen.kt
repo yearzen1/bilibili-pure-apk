@@ -12,17 +12,23 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.SearchVideoItem
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,26 +97,81 @@ fun SearchScreen(
                 }
             }
             else -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(uiState.results, key = { it.bvid }) { item ->
-                        SearchVideoCard(
-                            video = item,
-                            onClick = { onVideoClick(item.bvid) }
-                        )
-                    }
-                    if (uiState.isLoadingMore) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                val scope = rememberCoroutineScope()
+                val showScrollToTop by remember {
+                    derivedStateOf { listState.firstVisibleItemIndex > 2 }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                var dragStartX = 0f
+                                var dragStartY = 0f
+                                var consuming = false
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull() ?: continue
+                                    when (event.type) {
+                                        PointerEventType.Press -> {
+                                            consuming = false
+                                            dragStartX = change.position.x
+                                            dragStartY = change.position.y
+                                        }
+                                        PointerEventType.Move -> {
+                                            if (!consuming) {
+                                                val dx = change.position.x - dragStartX
+                                                val dy = change.position.y - dragStartY
+                                                if (abs(dx) > abs(dy) * 2 && abs(dx) > 30f) {
+                                                    consuming = true
+                                                    scope.launch {
+                                                        if (dx > 0) viewModel.prevSort()
+                                                        else viewModel.nextSort()
+                                                    }
+                                                }
+                                            }
+                                            if (consuming) change.consume()
+                                        }
+                                        else -> {}
+                                    }
+                                }
                             }
+                        }
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(uiState.results, key = { it.bvid }) { item ->
+                            SearchVideoCard(
+                                video = item,
+                                onClick = { onVideoClick(item.bvid) }
+                            )
+                        }
+                        if (uiState.isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (showScrollToTop && uiState.results.isNotEmpty()) {
+                        FloatingActionButton(
+                            onClick = { scope.launch { listState.scrollToItem(0) } },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
                         }
                     }
                 }
