@@ -350,8 +350,8 @@ private fun PlayerContent(
                                             touchStartX = event.x
                                             touchStartY = event.y
                                             val w = view.width
-                                            isOnLeftEdge = w > 0 && event.x < w * 0.2f
-                                            isOnRightEdge = w > 0 && event.x > w * 0.8f
+                                            isOnLeftEdge = w > 0 && event.x < w * 0.3f
+                                            isOnRightEdge = w > 0 && event.x > w * 0.7f
                                             isVerticalSwipe = isOnLeftEdge || isOnRightEdge
                                             false
                                         }
@@ -359,7 +359,7 @@ private fun PlayerContent(
                                             if (isVerticalSwipe) {
                                                 val dy = kotlin.math.abs(event.y - touchStartY)
                                                 val dx = kotlin.math.abs(event.x - touchStartX)
-                                                if (dy > dx && dy > 20f) {
+                                                if (dy > dx && dy > 5f) {
                                                     if (isOnLeftEdge && !showBrightnessOverlay) {
                                                         showBrightnessOverlay = true
                                                         val activity = ctx as? Activity
