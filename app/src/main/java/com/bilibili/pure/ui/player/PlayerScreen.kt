@@ -1,25 +1,38 @@
 package com.bilibili.pure.ui.player
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
+import android.media.AudioManager
+import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -35,6 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -202,39 +216,272 @@ private fun PlayerContent(
     onFullscreenToggle: () -> Unit,
     isFullscreen: Boolean
 ) {
-    when {
-        uiState.isLoading -> {
-            CircularProgressIndicator()
+    var currentSpeed by remember { mutableStateOf(1.0f) }
+    var showSpeedToast by remember { mutableStateOf(false) }
+    var showBrightnessOverlay by remember { mutableStateOf(false) }
+    var showVolumeOverlay by remember { mutableStateOf(false) }
+    var brightnessOverlayValue by remember { mutableStateOf(0.5f) }
+    var volumeOverlayValue by remember { mutableStateOf(0.5f) }
+    var overlayDismissKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(currentSpeed) {
+        if (currentSpeed != 1.0f) {
+            showSpeedToast = true
+            delay(1500)
+            showSpeedToast = false
         }
-        uiState.error != null -> {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("播放失败", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(uiState.error!!, style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    LaunchedEffect(overlayDismissKey) {
+        if (overlayDismissKey > 0) {
+            delay(1500)
+            showBrightnessOverlay = false
+            showVolumeOverlay = false
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        when {
+            uiState.isLoading -> {
+                CircularProgressIndicator()
+            }
+            uiState.error != null -> {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("播放失败", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(uiState.error!!, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+            uiState.videoUrl != null -> {
+                val exoPlayer = player
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).also { view ->
+                            view.layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            view.player = exoPlayer
+                            view.useController = true
+                            view.setShowNextButton(false)
+                            view.setShowPreviousButton(false)
+                            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            view.setFullscreenButtonClickListener {
+                                onFullscreenToggle()
+                            }
+
+                            if (isFullscreen) {
+                                var touchStartX = 0f
+                                var touchStartY = 0f
+                                var isOnLeftEdge = false
+                                var isOnRightEdge = false
+                                var isVerticalSwipe = false
+
+                                val gestureDetector = GestureDetector(
+                                    ctx,
+                                    object : GestureDetector.SimpleOnGestureListener() {
+                                        override fun onLongPress(e: MotionEvent) {
+                                            val p = exoPlayer as? ExoPlayer ?: return
+                                            currentSpeed = when {
+                                                currentSpeed < 1.5f -> 2.0f
+                                                currentSpeed < 2.5f -> 3.0f
+                                                else -> 1.0f
+                                            }
+                                            p.setPlaybackSpeed(currentSpeed)
+                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        }
+                                    }
+                                )
+
+                                view.setOnTouchListener { _, event ->
+                                    gestureDetector.onTouchEvent(event)
+
+                                    when (event.actionMasked) {
+                                        MotionEvent.ACTION_DOWN -> {
+                                            touchStartX = event.x
+                                            touchStartY = event.y
+                                            val w = view.width
+                                            isOnLeftEdge = w > 0 && event.x < w * 0.2f
+                                            isOnRightEdge = w > 0 && event.x > w * 0.8f
+                                            isVerticalSwipe = isOnLeftEdge || isOnRightEdge
+
+                                            if (isOnLeftEdge) {
+                                                showBrightnessOverlay = true
+                                                showVolumeOverlay = false
+                                                val activity = ctx as? Activity
+                                                if (activity != null) {
+                                                    val b = activity.window.attributes.screenBrightness
+                                                    brightnessOverlayValue = if (b < 0f) 0.5f else b
+                                                }
+                                            } else if (isOnRightEdge) {
+                                                showVolumeOverlay = true
+                                                showBrightnessOverlay = false
+                                                val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                if (audioManager != null) {
+                                                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                    val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                    volumeOverlayValue = if (max > 0) cur.toFloat() / max else 0f
+                                                }
+                                            }
+                                            false
+                                        }
+                                        MotionEvent.ACTION_MOVE -> {
+                                            if (isVerticalSwipe) {
+                                                val dy = kotlin.math.abs(event.y - touchStartY)
+                                                val dx = kotlin.math.abs(event.x - touchStartX)
+                                                if (dy > dx && dy > 20f) {
+                                                    val delta = (touchStartY - event.y) / view.height
+                                                    if (isOnLeftEdge) {
+                                                        val activity = ctx as? Activity
+                                                        if (activity != null) {
+                                                            val lp = activity.window.attributes
+                                                            val current = lp.screenBrightness
+                                                            val newB = if (current < 0f) 0.5f + delta else current + delta
+                                                            lp.screenBrightness = newB.coerceIn(0.01f, 1.0f)
+                                                            activity.window.attributes = lp
+                                                            brightnessOverlayValue = newB.coerceIn(0.01f, 1.0f)
+                                                        }
+                                                    } else {
+                                                        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                        if (audioManager != null) {
+                                                            val maxV = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                            val curV = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                            val newV = (curV + (delta * maxV).toInt()).coerceIn(0, maxV)
+                                                            if (newV != curV) {
+                                                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
+                                                            }
+                                                            volumeOverlayValue = newV.toFloat() / maxV
+                                                        }
+                                                    }
+                                                    touchStartY = event.y
+                                                    return@setOnTouchListener true
+                                                }
+                                            }
+                                            false
+                                        }
+                                        MotionEvent.ACTION_UP -> {
+                                            if (showBrightnessOverlay || showVolumeOverlay) {
+                                                overlayDismissKey++
+                                            }
+                                            isVerticalSwipe = false
+                                            false
+                                        }
+                                        else -> false
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
-        uiState.videoUrl != null -> {
-            val exoPlayer = player
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).also { view ->
-                        view.layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
+
+        if (showSpeedToast) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "%.1fx".format(currentSpeed),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showBrightnessOverlay,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 48.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Filled.BrightnessHigh,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "${(brightnessOverlayValue * 100).toInt()}%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(brightnessOverlayValue)
+                                .align(Alignment.BottomCenter)
+                                .background(Color.White, RoundedCornerShape(2.dp))
                         )
-                        view.player = exoPlayer
-                        view.useController = true
-                        view.setShowNextButton(false)
-                        view.setShowPreviousButton(false)
-                        view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        view.setFullscreenButtonClickListener {
-                            onFullscreenToggle()
-                        }
                     }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showVolumeOverlay,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 48.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "${(volumeOverlayValue * 100).toInt()}%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(volumeOverlayValue)
+                                .align(Alignment.BottomCenter)
+                                .background(Color.White, RoundedCornerShape(2.dp))
+                        )
+                    }
+                }
+            }
         }
     }
 }

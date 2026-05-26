@@ -17,6 +17,7 @@
 - **网络**: Retrofit2 + OkHttp（自定义 Interceptor 添加 Referer/User-Agent/Cookie）
 - **图片加载**: Coil（使用同一 OkHttp 客户端，确保图片 CDN 鉴权通过）
 - **UI**: Jetpack Compose + Material3
+- **手势控制**: 横屏全屏模式下左侧滑动调亮度、右侧滑动调音量、长按切换播放倍速（1x/2x/3x）
 - **HTTP 协议**: 强制 HTTP/1.1（OkHttp 默认 HTTP/2 会触发 Bilibili WAF 412）
 
 ## 已知问题
