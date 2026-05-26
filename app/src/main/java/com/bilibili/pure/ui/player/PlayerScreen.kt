@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -79,6 +80,26 @@ fun PlayerScreen(
         ExoPlayer.Builder(context).build().apply {
             playWhenReady = true
             repeatMode = Player.REPEAT_MODE_OFF
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    val s = when (state) {
+                        Player.STATE_IDLE -> "IDLE"
+                        Player.STATE_BUFFERING -> "BUFFERING"
+                        Player.STATE_READY -> "READY"
+                        Player.STATE_ENDED -> "ENDED"
+                        else -> "UNKNOWN"
+                    }
+                    Log.d(BilibiliApp.TAG, "Player: state=$s")
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e(BilibiliApp.TAG, "Player: error=${error.message}", error)
+                }
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    Log.d(BilibiliApp.TAG, "Player: isPlaying=$isPlaying")
+                }
+            })
         }
     }
 

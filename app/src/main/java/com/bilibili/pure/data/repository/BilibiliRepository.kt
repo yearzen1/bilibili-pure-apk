@@ -39,21 +39,30 @@ class BilibiliRepository(
     }
 
     suspend fun getPlayUrl(bvid: String, cid: Long, qn: Int = 80): Result<String> {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn")
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn fnval=1 platform=android")
         return runCatching {
             val response = api.getPlayUrl(bvid = bvid, cid = cid, qn = qn)
-            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl response: code=${response.code} msg=${response.message}")
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl response: code=${response.code} msg=${response.message} ttl=${response.ttl}")
             if (response.code == 0) {
                 val playUrl = response.data
-                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl success: quality=${playUrl?.quality} format=${playUrl?.format} durl=${playUrl?.durl?.size}")
+                if (BuildConfig.DEBUG) {
+                    val acceptDesc = playUrl?.accept_description?.joinToString(", ") ?: "N/A"
+                    val acceptQual = playUrl?.accept_quality?.joinToString(", ") ?: "N/A"
+                    Log.d(BilibiliApp.TAG, "getPlayUrl success: quality=${playUrl?.quality}(${playUrl?.format}) " +
+                        "duration=${playUrl?.timelength}ms accept=[$acceptQual]($acceptDesc) " +
+                        "durl=${playUrl?.durl?.size} segments")
+                    playUrl?.durl?.forEachIndexed { i, d ->
+                        Log.d(BilibiliApp.TAG, "getPlayUrl durl[$i]: size=${d.size} len=${d.length} url=${d.url.take(100)}...")
+                    }
+                }
                 val url = playUrl?.durl?.firstOrNull()?.url
                     ?: throw Exception("No playable URL")
-                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl url: ${url.take(80)}...")
                 url
             } else {
+                Log.w(BilibiliApp.TAG, "getPlayUrl failed: code=${response.code} msg=${response.message}")
                 throw Exception(response.message)
             }
-        }.onFailure { Log.e(BilibiliApp.TAG, "getPlayUrl failed", it) }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getPlayUrl exception", it) }
     }
 
     suspend fun getComments(aid: Long, page: Int = 0): Result<CommentList> {

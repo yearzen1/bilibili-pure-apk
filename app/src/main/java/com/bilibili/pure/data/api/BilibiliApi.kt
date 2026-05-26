@@ -67,7 +67,7 @@ interface BilibiliApi {
 
         val httpClient: OkHttpClient by lazy {
             val logging = HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
                         else HttpLoggingInterceptor.Level.NONE
             }
 
