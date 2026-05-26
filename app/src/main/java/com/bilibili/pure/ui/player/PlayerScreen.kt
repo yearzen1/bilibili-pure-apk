@@ -234,7 +234,7 @@ private fun PlayerContent(
 
     LaunchedEffect(overlayDismissKey) {
         if (overlayDismissKey > 0) {
-            delay(1500)
+            delay(800)
             showBrightnessOverlay = false
             showVolumeOverlay = false
         }
@@ -305,25 +305,6 @@ private fun PlayerContent(
                                             isOnLeftEdge = w > 0 && event.x < w * 0.2f
                                             isOnRightEdge = w > 0 && event.x > w * 0.8f
                                             isVerticalSwipe = isOnLeftEdge || isOnRightEdge
-
-                                            if (isOnLeftEdge) {
-                                                showBrightnessOverlay = true
-                                                showVolumeOverlay = false
-                                                val activity = ctx as? Activity
-                                                if (activity != null) {
-                                                    val b = activity.window.attributes.screenBrightness
-                                                    brightnessOverlayValue = if (b < 0f) 0.5f else b
-                                                }
-                                            } else if (isOnRightEdge) {
-                                                showVolumeOverlay = true
-                                                showBrightnessOverlay = false
-                                                val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                                                if (audioManager != null) {
-                                                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                                    val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                                                    volumeOverlayValue = if (max > 0) cur.toFloat() / max else 0f
-                                                }
-                                            }
                                             false
                                         }
                                         MotionEvent.ACTION_MOVE -> {
@@ -331,6 +312,23 @@ private fun PlayerContent(
                                                 val dy = kotlin.math.abs(event.y - touchStartY)
                                                 val dx = kotlin.math.abs(event.x - touchStartX)
                                                 if (dy > dx && dy > 20f) {
+                                                    if (isOnLeftEdge && !showBrightnessOverlay) {
+                                                        showBrightnessOverlay = true
+                                                        val activity = ctx as? Activity
+                                                        if (activity != null) {
+                                                            val b = activity.window.attributes.screenBrightness
+                                                            brightnessOverlayValue = if (b < 0f) 0.5f else b
+                                                        }
+                                                    }
+                                                    if (isOnRightEdge && !showVolumeOverlay) {
+                                                        showVolumeOverlay = true
+                                                        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                        if (audioManager != null) {
+                                                            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                            val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                            volumeOverlayValue = if (max > 0) cur.toFloat() / max else 0f
+                                                        }
+                                                    }
                                                     val delta = (touchStartY - event.y) / view.height
                                                     if (isOnLeftEdge) {
                                                         val activity = ctx as? Activity
