@@ -4,13 +4,17 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.util.Log
+import android.view.ContextThemeWrapper
+import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
 import android.media.AudioManager
-import android.view.GestureDetector
-import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
+import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.TextView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -47,6 +51,7 @@ import androidx.media3.ui.PlayerView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
+import com.bilibili.pure.R
 import com.bilibili.pure.data.api.BilibiliApi
 import kotlinx.coroutines.delay
 
@@ -225,11 +230,10 @@ private fun PlayerContent(
     var overlayDismissKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(currentSpeed) {
-        if (currentSpeed != 1.0f) {
-            showSpeedToast = true
-            delay(1500)
-            showSpeedToast = false
-        }
+        if (currentSpeed == 1.0f && !showSpeedToast) return@LaunchedEffect
+        showSpeedToast = true
+        delay(if (currentSpeed == 1.0f) 600 else 1500)
+        showSpeedToast = false
     }
 
     LaunchedEffect(overlayDismissKey) {
@@ -269,6 +273,50 @@ private fun PlayerContent(
                             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             view.setFullscreenButtonClickListener {
                                 onFullscreenToggle()
+                            }
+
+                            // 在控制器栏添加倍速按钮
+                            val settingsId = ctx.resources.getIdentifier("exo_settings", "id", ctx.packageName)
+                            if (settingsId != 0) {
+                                val settingsView = view.findViewById<View>(settingsId)
+                                val controlsRow = settingsView?.parent as? ViewGroup
+                                if (controlsRow != null && controlsRow.findViewWithTag<View>("speed_button") == null) {
+                                    val density = ctx.resources.displayMetrics.density
+                                    val btnSize = (48 * density).toInt()
+                                    val btnMargin = (2 * density).toInt()
+                                    val speedBtn = TextView(ctx).apply {
+                                        tag = "speed_button"
+                                        text = "1.0x"
+                                        setTextColor(android.graphics.Color.WHITE)
+                                        textSize = 13f
+                                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                                        gravity = android.view.Gravity.CENTER
+                                        layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).also {
+                                            it.leftMargin = btnMargin
+                                            it.rightMargin = btnMargin
+                                        }
+                                        setOnClickListener { anchor ->
+                                            val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
+                                            val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
+                                            val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                                            speeds.forEachIndexed { i, speed ->
+                                                popup.menu.add(0, i, 0, "%.2gx".format(speed)).apply {
+                                                    if (speed == currentSpeed) isChecked = true
+                                                }
+                                            }
+                                            popup.menu.setGroupCheckable(0, true, true)
+                                            popup.setOnMenuItemClickListener { item ->
+                                                val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
+                                                currentSpeed = speed
+                                                (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(speed)
+                                                showSpeedToast = true
+                                                true
+                                            }
+                                            popup.show()
+                                        }
+                                    }
+                                    controlsRow.addView(speedBtn, 0)
+                                }
                             }
 
                             if (isFullscreen) {
@@ -359,6 +407,11 @@ private fun PlayerContent(
                                             false
                                         }
                                         MotionEvent.ACTION_UP -> {
+                                            if (currentSpeed > 1.0f) {
+                                                showSpeedToast = true
+                                                currentSpeed = 1.0f
+                                                (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(1.0f)
+                                            }
                                             if (showBrightnessOverlay || showVolumeOverlay) {
                                                 overlayDismissKey++
                                             }
@@ -370,6 +423,9 @@ private fun PlayerContent(
                                 }
                             }
                         }
+                    },
+                    update = { view ->
+                        view.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(currentSpeed)
                     },
                     modifier = Modifier.fillMaxSize()
                 )

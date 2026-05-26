@@ -4,4 +4,6 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <style name="ThemeOverlay.Bilibili.DarkPopup" parent="android:ThemeOverlay.Material.Dark" />
 </resources>
