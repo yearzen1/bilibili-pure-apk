@@ -62,6 +62,20 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "reportProgress exception", it) }
     }
 
+    suspend fun getUserVideos(mid: Long, page: Int = 1): Result<Pair<List<UserVideoItem>, UserSpacePage?>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getUserVideos: mid=$mid page=$page")
+        return runCatching<Pair<List<UserVideoItem>, UserSpacePage?>> {
+            val response = api.getUserVideos(mid = mid, page = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getUserVideos response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                val data = response.data
+                Pair(data?.list?.vlist ?: emptyList(), data?.page)
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getUserVideos failed", it) }
+    }
+
     suspend fun getPlayUrl(bvid: String, cid: Long, qn: Int = 80): Result<String> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn fnval=1 platform=android")
         return runCatching {

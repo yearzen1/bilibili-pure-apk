@@ -19,9 +19,11 @@ object Routes {
     const val PLAYER = "player/{bvid}"
     const val LOGIN = "login"
     const val HISTORY = "history"
+    const val CHANNEL = "channel/{mid}"
 
     fun detail(bvid: String) = "detail/$bvid"
     fun player(bvid: String) = "player/$bvid"
+    fun channel(mid: Long) = "channel/$mid"
 }
 
 val bottomNavItems = listOf(Screen.Search, Screen.Profile)

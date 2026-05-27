@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.history.HistoryScreen
 import com.bilibili.pure.ui.login.LoginScreen
@@ -104,7 +105,8 @@ fun MainScreen() {
                 DetailScreen(
                     bvid = bvid,
                     onBack = { navController.popBackStack() },
-                    onPlay = { b -> navController.navigate(Routes.player(b)) }
+                    onPlay = { b -> navController.navigate(Routes.player(b)) },
+                    onUploaderClick = { mid -> navController.navigate(Routes.channel(mid)) }
                 )
             }
 
@@ -133,6 +135,20 @@ fun MainScreen() {
 
             composable(route = Routes.HISTORY) {
                 HistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid ->
+                        navController.navigate(Routes.detail(bvid))
+                    }
+                )
+            }
+
+            composable(
+                route = Routes.CHANNEL,
+                arguments = listOf(navArgument("mid") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val mid = backStackEntry.arguments?.getLong("mid") ?: return@composable
+                ChannelScreen(
+                    mid = mid,
                     onBack = { navController.popBackStack() },
                     onVideoClick = { bvid ->
                         navController.navigate(Routes.detail(bvid))

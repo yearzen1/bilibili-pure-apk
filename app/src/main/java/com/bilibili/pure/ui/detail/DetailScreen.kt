@@ -32,12 +32,25 @@ private fun fixPic(url: String): String = when {
     else -> url
 }
 
+private fun formatTimestamp(unixSeconds: Long): String {
+    val now = System.currentTimeMillis() / 1000
+    val diff = now - unixSeconds
+    return when {
+        diff < 60 -> "刚刚"
+        diff < 3600 -> "${diff / 60}分钟前"
+        diff < 86400 -> "${diff / 3600}小时前"
+        diff < 604800 -> "${diff / 86400}天前"
+        else -> SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(unixSeconds * 1000))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     bvid: String,
     onBack: () -> Unit,
     onPlay: (bvid: String) -> Unit,
+    onUploaderClick: (mid: Long) -> Unit = {},
     viewModel: DetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -80,6 +93,7 @@ fun DetailScreen(
                     videoInfo = uiState.videoInfo!!,
                     comments = uiState.comments,
                     onPlay = { onPlay(bvid) },
+                    onUploaderClick = onUploaderClick,
                     modifier = Modifier.padding(padding),
                     replyThreads = uiState.replyThreads,
                     expandedReplies = uiState.expandedReplies,
@@ -98,6 +112,7 @@ private fun DetailContent(
     videoInfo: VideoInfo,
     comments: List<com.bilibili.pure.data.model.CommentItem>?,
     onPlay: () -> Unit,
+    onUploaderClick: (mid: Long) -> Unit = {},
     modifier: Modifier = Modifier,
     replyThreads: Map<Long, ReplyThread> = emptyMap(),
     expandedReplies: Set<Long> = emptySet(),
@@ -161,18 +176,24 @@ private fun DetailContent(
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(
-                        model = fixPic(videoInfo.owner.face),
-                        contentDescription = videoInfo.owner.name,
-                        modifier = Modifier.size(40.dp),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = videoInfo.owner.name,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onUploaderClick(videoInfo.owner.mid) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = fixPic(videoInfo.owner.face),
+                            contentDescription = videoInfo.owner.name,
+                            modifier = Modifier.size(40.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = videoInfo.owner.name,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                     Button(onClick = onPlay) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
@@ -325,11 +346,19 @@ private fun CommentCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = comment.member.uname,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = comment.member.uname,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = formatTimestamp(comment.ctime),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = comment.content.message,
@@ -365,11 +394,19 @@ private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem) {
         )
         Spacer(modifier = Modifier.width(6.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = reply.member.uname,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = reply.member.uname,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = formatTimestamp(reply.ctime),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = reply.content.message,
                 style = MaterialTheme.typography.bodySmall

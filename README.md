@@ -12,6 +12,7 @@
 | 手势控制 | 双击播放/暂停、长按倍速（松手恢复 1x）、左侧调亮度、右侧调音量 |
 | 速度控制 | 弹出菜单（0.5x–2.0x）、长按快速切换 |
 | 评论系统 | 分页加载、展开回复、收起回复 |
+| UP主频道 | 视频详情页点击 UP主名进入频道页，查看该 UP主的所有视频（分页） |
 | 登录 | 二维码登录 + 密码登录（WebView 方式） |
 | 个人中心 | 登录状态展示、退出登录 |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
@@ -21,15 +22,16 @@
 
 | API | 端点 | 用途 | 状态 |
 |---|---|---|---|
-| 搜索 | `x/web-interface/search/type` | 视频搜索，排序与分页 | ✅ |
-| 视频详情 | `x/web-interface/view` | 视频信息、封面、分 P | ✅ |
-| 播放地址 | `x/player/playurl` | MP4 直链（fnval=1） | ✅ |
-| 评论 | `x/v2/reply/main` | 视频评论（游标分页） | ✅ |
-| 回复 | `x/v2/reply/reply` | 评论回复（最多 20 条） | ✅ |
-| 二维码生成 | `x/passport-login/oauth2/qrcode/generate` | 登录二维码 | ✅ |
-| 二维码轮询 | `x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
-| 进度上报 | `x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
-| 观看历史 | `x/v2/history` | 视频历史记录 | ✅ |
+| 搜索 | `api.bilibili.com/x/web-interface/search/type` | 视频搜索，排序与分页 | ✅ |
+| 视频详情 | `api.bilibili.com/x/web-interface/view` | 视频信息、封面、分 P | ✅ |
+| UP主视频列表 | `api.bilibili.com/x/space/wbi/arc/search` | UP主视频分页列表（WBI 签名） | ✅ |
+| 播放地址 | `api.bilibili.com/x/player/playurl` | MP4 直链（fnval=1） | ✅ |
+| 评论 | `api.bilibili.com/x/v2/reply/main` | 视频评论（游标分页） | ✅ |
+| 回复 | `api.bilibili.com/x/v2/reply/reply` | 评论回复（最多 20 条） | ✅ |
+| 二维码生成 | `api.bilibili.com/x/passport-login/oauth2/qrcode/generate` | 登录二维码 | ✅ |
+| 二维码轮询 | `api.bilibili.com/x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
+| 进度上报 | `api.bilibili.com/x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
+| 观看历史 | `api.bilibili.com/x/v2/history` | 视频历史记录 | ✅ |
 
 ## 技术栈
 
@@ -54,6 +56,16 @@ Bilibili CDN 视频地址含 `platform=pc`，拒绝 Android UA。拦截器根据
 - **CDN 请求** → 桌面 Windows Chrome UA
 - **API 请求** → Android Chrome UA + 完整浏览器头
 
+### WBI 签名
+Bilibili Web 端部分接口（如 `x/space/wbi/arc/search`）需要 WBI 签名鉴权，缺失 `w_rid`/`wts` 时返回 -403 或 -352。
+
+签名流程：
+1. 从 `x/web-interface/nav` 获取每日轮换的 `img_key`/`sub_key`（伪装成 PNG URL，缓存 24 小时）
+2. 用固定 64 元素置换表 `MIXIN_KEY_ENC_TAB` 对 `img_key + sub_key` 打乱重排，取前 32 位为 `mixin_key`
+3. 参数按 key 排序，`encodeURIComponent` 编码后拼接（过滤 `!'()*`）
+4. 拼接 `mixin_key` 后 MD5 → `w_rid`，`wts` 为 Unix 秒级时间戳
+5. 拦截器自动检测 `/wbi/` 路径，注入签名参数
+
 ### 登录
 - **二维码登录**: Passport API 生成 → 轮询扫码状态 → 提取 `SESSDATA`/`bili_jct`/`DedeUserID` → SharedPreferences 持久化
 - **密码登录**: WebView 加载 `passport.bilibili.com/login` → `onPageFinished` 拦截 Cookie → CookieManager 管理会话
@@ -75,5 +87,5 @@ Bilibili CDN 视频地址含 `platform=pc`，拒绝 Android UA。拦截器根据
 ## 已知问题
 
 - `PlayerView.setUseTextureView(true)` 在 Media3 1.4.1 中不可用（需升级），全屏退出时 SurfaceView 偶发闪黑帧
-- 评论 API 使用 WBI 签名时返回 -403（需 SESSATA cookie 登录后才可访问）
+- 评论 API 仍返回 -403（部分端点还需 WBI 签名 + SESSDATA 登录才能访问）
 - WAF 412 在 OkHttp 特定 TLS 握手模式下仍可能偶发触发

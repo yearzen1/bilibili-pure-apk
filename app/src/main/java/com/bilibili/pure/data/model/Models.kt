@@ -139,3 +139,31 @@ data class QRPollData(
     val code: Int? = null,
     val message: String? = null
 )
+
+data class UserSpaceData(
+    val list: UserVideoList?,
+    val page: UserSpacePage?
+)
+
+data class UserVideoList(
+    val vlist: List<UserVideoItem>?
+)
+
+data class UserVideoItem(
+    val bvid: String,
+    val aid: Long,
+    val title: String,
+    val pic: String,
+    @SerializedName("play") val playCount: Long,
+    @SerializedName("video_review") val danmakuCount: Long,
+    val pubdate: Long,
+    val description: String,
+    val mid: Long,
+    val author: String
+)
+
+data class UserSpacePage(
+    val pn: Int = 1,
+    val ps: Int = 30,
+    val count: Int = 0
+)
