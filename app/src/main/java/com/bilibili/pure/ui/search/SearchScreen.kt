@@ -1,12 +1,11 @@
 package com.bilibili.pure.ui.search
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -185,14 +184,30 @@ private fun SortSelector(
     selected: SearchSortOption,
     onSelect: (SearchSortOption) -> Unit
 ) {
-    Row(
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selected) {
+        val index = SearchSort.options.indexOf(selected)
+        if (index >= 0) {
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val viewportWidth = listState.layoutInfo.viewportEndOffset
+            val fullyVisible = visibleItems.any { item ->
+                item.index == index && item.offset >= 0 && (item.offset + item.size) <= viewportWidth
+            }
+            if (!fullyVisible) {
+                listState.animateScrollToItem(index)
+            }
+        }
+    }
+
+    LazyRow(
+        state = listState,
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SearchSort.options.forEach { option ->
+        items(SearchSort.options, key = { it.value }) { option ->
             FilterChip(
                 selected = option == selected,
                 onClick = { onSelect(option) },

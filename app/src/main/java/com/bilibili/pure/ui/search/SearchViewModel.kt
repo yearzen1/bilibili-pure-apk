@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.model.SearchVideoItem
 import com.bilibili.pure.data.repository.BilibiliRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +46,8 @@ class SearchViewModel(
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
+    private var searchJob: Job? = null
+
     fun onQueryChange(query: String) {
         _uiState.value = _uiState.value.copy(query = query)
     }
@@ -51,6 +55,7 @@ class SearchViewModel(
     fun setSortBy(sort: SearchSortOption) {
         if (sort.value == _uiState.value.sortBy.value) return
         _uiState.value = _uiState.value.copy(sortBy = sort)
+        searchJob?.cancel()
         search()
     }
 
@@ -60,7 +65,10 @@ class SearchViewModel(
 
         val order = _uiState.value.sortBy.value
         Log.d(BilibiliApp.TAG, "search: query=$query sort=$order")
-        viewModelScope.launch {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(500)
+            if (query != _uiState.value.query.trim() || order != _uiState.value.sortBy.value) return@launch
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, results = emptyList(), currentPage = 1)
             repository.search(query, page = 1, order = order)
                 .onSuccess { (results, totalPages) ->
@@ -99,6 +107,7 @@ class SearchViewModel(
     }
 
     fun loadMore() {
+        searchJob?.cancel()
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMore) return
 
