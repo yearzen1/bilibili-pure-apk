@@ -103,6 +103,8 @@ fun PlayerScreen(
         }
     }
 
+    val speedCtl = remember { SpeedController(player) }
+
     DisposableEffect(Unit) {
         onDispose {
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
@@ -173,6 +175,7 @@ fun PlayerScreen(
             PlayerContent(
                 uiState = uiState,
                 player = player,
+                speedCtl = speedCtl,
                 onFullscreenToggle = { toggleFullscreen() },
                 isFullscreen = true
             )
@@ -213,6 +216,7 @@ fun PlayerScreen(
                     PlayerContent(
                         uiState = uiState,
                         player = player,
+                        speedCtl = speedCtl,
                         onFullscreenToggle = { toggleFullscreen() },
                         isFullscreen = false
                     )
@@ -250,10 +254,10 @@ fun PlayerScreen(
 private fun PlayerContent(
     uiState: com.bilibili.pure.ui.player.PlayerUiState,
     player: Player,
+    speedCtl: SpeedController,
     onFullscreenToggle: () -> Unit,
     isFullscreen: Boolean
 ) {
-    var currentSpeed by remember { mutableStateOf(1.0f) }
     var showSpeedToast by remember { mutableStateOf(false) }
     var showBrightnessOverlay by remember { mutableStateOf(false) }
     var showVolumeOverlay by remember { mutableStateOf(false) }
@@ -261,10 +265,10 @@ private fun PlayerContent(
     var volumeOverlayValue by remember { mutableStateOf(0.5f) }
     var overlayDismissKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(currentSpeed) {
-        if (currentSpeed == 1.0f && !showSpeedToast) return@LaunchedEffect
+    LaunchedEffect(speedCtl.effectiveSpeed) {
+        if (speedCtl.effectiveSpeed == 1.0f && !showSpeedToast) return@LaunchedEffect
         showSpeedToast = true
-        delay(if (currentSpeed == 1.0f) 600 else 1500)
+        delay(if (speedCtl.effectiveSpeed == 1.0f) 600 else 1500)
         showSpeedToast = false
     }
 
@@ -333,17 +337,16 @@ private fun PlayerContent(
                                             val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
                                             speeds.forEachIndexed { i, speed ->
                                                 popup.menu.add(0, i, 0, "%.2gx".format(speed)).apply {
-                                                    if (speed == currentSpeed) isChecked = true
-                                                }
-                                            }
-                                            popup.menu.setGroupCheckable(0, true, true)
-                                            popup.setOnMenuItemClickListener { item ->
-                                                val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
-                                                currentSpeed = speed
-                                                (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(speed)
-                                                showSpeedToast = true
-                                                true
-                                            }
+                                                    if (speed == speedCtl.baseSpeed) isChecked = true
+                                                 }
+                                             }
+                                             popup.menu.setGroupCheckable(0, true, true)
+                                             popup.setOnMenuItemClickListener { item ->
+                                                 val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
+                                                 speedCtl.setBase(speed)
+                                                 showSpeedToast = true
+                                                 true
+                                             }
                                             popup.show()
                                         }
                                     }
@@ -361,14 +364,8 @@ private fun PlayerContent(
                                 ctx,
                                 object : GestureDetector.SimpleOnGestureListener() {
                                     override fun onLongPress(e: MotionEvent) {
-                                        val p = exoPlayer as? ExoPlayer ?: return
-                                        currentSpeed = when {
-                                            currentSpeed < 1.5f -> 2.0f
-                                            currentSpeed < 2.5f -> 3.0f
-                                            else -> 1.0f
-                                        }
-                                        p.setPlaybackSpeed(currentSpeed)
                                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        speedCtl.startOverride()
                                     }
 
                                     override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -393,6 +390,7 @@ private fun PlayerContent(
                                         false
                                     }
                                     MotionEvent.ACTION_MOVE -> {
+                                        if (speedCtl.isOverrideActive) return@setOnTouchListener true
                                         if (isVerticalSwipe) {
                                             val dy = kotlin.math.abs(event.y - touchStartY)
                                             val dx = kotlin.math.abs(event.x - touchStartX)
@@ -444,10 +442,9 @@ private fun PlayerContent(
                                         false
                                     }
                                     MotionEvent.ACTION_UP -> {
-                                        if (currentSpeed > 1.0f) {
+                                        if (speedCtl.isOverrideActive) {
+                                            speedCtl.stopOverride()
                                             showSpeedToast = true
-                                            currentSpeed = 1.0f
-                                            (exoPlayer as? ExoPlayer)?.setPlaybackSpeed(1.0f)
                                         }
                                         if (showBrightnessOverlay || showVolumeOverlay) {
                                             overlayDismissKey++
@@ -461,7 +458,7 @@ private fun PlayerContent(
                         }
                     },
                     update = { view ->
-                        view.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(currentSpeed)
+                        view.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(speedCtl.baseSpeed)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -477,7 +474,7 @@ private fun PlayerContent(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "%.1fx".format(currentSpeed),
+                    text = "%.1fx".format(speedCtl.effectiveSpeed),
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium
                 )
