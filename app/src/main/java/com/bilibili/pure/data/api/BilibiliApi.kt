@@ -104,7 +104,7 @@ interface BilibiliApi {
                 .addInterceptor { chain ->
                     val orig = chain.request()
                     val url = orig.url.toString()
-                    val isCdn = url.contains("bilivideo.com") || url.contains("upos") || url.contains("hdslb.com")
+                    val isCdn = !url.contains("api.bilibili.com")
                     val builder = orig.newBuilder()
                         .header("Referer", "https://www.bilibili.com/")
                     if (isCdn) {
