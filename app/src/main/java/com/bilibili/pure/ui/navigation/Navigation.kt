@@ -18,6 +18,7 @@ object Routes {
     const val DETAIL = "detail/{bvid}"
     const val PLAYER = "player/{bvid}"
     const val LOGIN = "login"
+    const val HISTORY = "history"
 
     fun detail(bvid: String) = "detail/$bvid"
     fun player(bvid: String) = "player/$bvid"

@@ -115,6 +115,18 @@ data class DurlItem(
     val size: Long
 )
 
+data class HistoryItem(
+    val bvid: String,
+    val aid: Long,
+    val title: String,
+    val pic: String,
+    val owner: VideoOwner,
+    val stat: VideoStat,
+    val duration: Long,
+    val progress: Long,
+    @SerializedName("view_at") val viewAt: Long
+)
+
 data class QRLoginData(
     val url: String,
     @SerializedName("qrcode_key") val qrcodeKey: String

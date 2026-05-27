@@ -38,6 +38,30 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getVideoInfo failed", it) }
     }
 
+    suspend fun getHistory(page: Int = 1, pageSize: Int = 20): Result<List<HistoryItem>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getHistory: page=$page pageSize=$pageSize")
+        return runCatching {
+            val response = api.getHistory(page = page, pageSize = pageSize)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getHistory response: code=${response.code}")
+            if (response.code == 0) {
+                response.data ?: emptyList()
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getHistory failed", it) }
+    }
+
+    suspend fun reportProgress(aid: Long, cid: Long, progress: Long): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress: aid=$aid cid=$cid progress=${progress}s")
+        return runCatching {
+            val response = api.reportProgress(aid = aid, cid = cid, progress = progress, csrf = BilibiliApi.biliJct)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) {
+                Log.w(BilibiliApp.TAG, "reportProgress failed: code=${response.code} msg=${response.message}")
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "reportProgress exception", it) }
+    }
+
     suspend fun getPlayUrl(bvid: String, cid: Long, qn: Int = 80): Result<String> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn fnval=1 platform=android")
         return runCatching {

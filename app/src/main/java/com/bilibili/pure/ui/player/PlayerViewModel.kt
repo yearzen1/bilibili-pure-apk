@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
+import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.model.VideoPage
 import com.bilibili.pure.data.repository.BilibiliRepository
@@ -61,6 +62,13 @@ class PlayerViewModel(
         Log.d(BilibiliApp.TAG, "PlayerVM: selectPage page=${page.page} cid=${page.cid} part=${page.part}")
         _uiState.value = _uiState.value.copy(currentPage = page, isLoading = true, videoUrl = null)
         loadPlayUrl(bvid, page.cid)
+    }
+
+    fun reportProgress(aid: Long, cid: Long, progress: Long) {
+        if (BilibiliApi.loginCookies.isBlank()) return
+        viewModelScope.launch {
+            repository.reportProgress(aid, cid, progress)
+        }
     }
 
     private fun loadPlayUrl(bvid: String, cid: Long) {

@@ -66,6 +66,7 @@ fun PlayerScreen(
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
     var isFullscreen by remember { mutableStateOf(false) }
+    var playing by remember { mutableStateOf(false) }
 
     LaunchedEffect(bvid) {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
@@ -98,6 +99,7 @@ fun PlayerScreen(
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     Log.d(BilibiliApp.TAG, "Player: isPlaying=$isPlaying")
+                    playing = isPlaying
                 }
             })
         }
@@ -107,6 +109,11 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            val aid = uiState.videoInfo?.aid
+            val cid = uiState.currentPage?.cid
+            if (aid != null && cid != null && player.currentPosition > 0) {
+                vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
+            }
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
             player.run {
                 playWhenReady = false
@@ -136,6 +143,21 @@ fun PlayerScreen(
                 .createMediaSource(mediaItem)
             player.setMediaSource(mediaSource)
             player.prepare()
+        }
+    }
+
+    LaunchedEffect(playing, uiState.videoInfo?.aid, uiState.currentPage?.cid) {
+        val aid = uiState.videoInfo?.aid ?: return@LaunchedEffect
+        val cid = uiState.currentPage?.cid ?: return@LaunchedEffect
+        if (playing) {
+            delay(30_000)
+            while (true) {
+                val progress = (player.currentPosition / 1000).coerceAtLeast(1)
+                vm.reportProgress(aid, cid, progress)
+                delay(30_000)
+            }
+        } else if (player.currentPosition > 0) {
+            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
         }
     }
 
@@ -234,7 +256,16 @@ fun PlayerScreen(
                             val selected = page.cid == uiState.currentPage?.cid
                             FilterChip(
                                 selected = selected,
-                                onClick = { if (!selected) vm.selectPage(page) },
+                                onClick = {
+                                    if (!selected) {
+                                        val aid = uiState.videoInfo?.aid
+                                        val cid = uiState.currentPage?.cid
+                                        if (aid != null && cid != null && player.currentPosition > 0) {
+                                            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
+                                        }
+                                        vm.selectPage(page)
+                                    }
+                                },
                                 label = {
                                     Text(
                                         if (page.part.isNotEmpty()) page.part

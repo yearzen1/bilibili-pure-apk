@@ -15,6 +15,7 @@
 | 登录 | 二维码登录 + 密码登录（WebView 方式） |
 | 个人中心 | 登录状态展示、退出登录 |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
+| 观看历史 | 30 秒心跳上报播放进度到 B 站服务器，暂停/退出/切 P 时同步 |
 
 ## 使用的 API
 
@@ -27,6 +28,8 @@
 | 回复 | `x/v2/reply/reply` | 评论回复（最多 20 条） | ✅ |
 | 二维码生成 | `x/passport-login/oauth2/qrcode/generate` | 登录二维码 | ✅ |
 | 二维码轮询 | `x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
+| 进度上报 | `x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
+| 观看历史 | `x/v2/history` | 视频历史记录 | ✅ |
 
 ## 技术栈
 
@@ -55,6 +58,15 @@ Bilibili CDN 视频地址含 `platform=pc`，拒绝 Android UA。拦截器根据
 - **二维码登录**: Passport API 生成 → 轮询扫码状态 → 提取 `SESSDATA`/`bili_jct`/`DedeUserID` → SharedPreferences 持久化
 - **密码登录**: WebView 加载 `passport.bilibili.com/login` → `onPageFinished` 拦截 Cookie → CookieManager 管理会话
 - 应用启动时从 SharedPreferences 恢复登录状态
+
+### 观看历史 / 心跳上报
+通过 `POST x/v2/history/report` 定时上报播放进度，使视频出现在 B 站观看历史中：
+- **播放中**：每 30 秒上报一次（`LaunchedEffect` + `delay(30_000)` 循环）
+- **暂停**：`onIsPlayingChanged` 触发即时上报
+- **退出**：`DisposableEffect.onDispose` 在释放播放器前上报最终进度
+- **切 P**：切换分 P 前上报当前分 P 的进度
+- **身份认证**：需登录（`SESSDATA`/`bili_jct`/`DedeUserID`），且 `csrf` 表单字段必须等于 `bili_jct` cookie 值
+- **progress 单位**：秒（`player.currentPosition / 1000`，最小 1）
 
 ### Coil 缓存
 - 内存缓存：16MB LRU

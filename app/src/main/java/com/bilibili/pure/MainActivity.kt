@@ -17,6 +17,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bilibili.pure.ui.detail.DetailScreen
+import com.bilibili.pure.ui.history.HistoryScreen
 import com.bilibili.pure.ui.login.LoginScreen
 import com.bilibili.pure.ui.navigation.Routes
 import com.bilibili.pure.ui.navigation.Screen
@@ -89,9 +90,10 @@ fun MainScreen() {
             }
 
             composable(Screen.Profile.route) {
-                ProfileScreen(onLoginClick = {
-                    navController.navigate(Routes.LOGIN)
-                })
+                ProfileScreen(
+                    onLoginClick = { navController.navigate(Routes.LOGIN) },
+                    onHistoryClick = { navController.navigate(Routes.HISTORY) }
+                )
             }
 
             composable(
@@ -125,6 +127,15 @@ fun MainScreen() {
                         navController.navigate(Screen.Profile.route) {
                             popUpTo(Routes.LOGIN) { inclusive = true }
                         }
+                    }
+                )
+            }
+
+            composable(route = Routes.HISTORY) {
+                HistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid ->
+                        navController.navigate(Routes.detail(bvid))
                     }
                 )
             }

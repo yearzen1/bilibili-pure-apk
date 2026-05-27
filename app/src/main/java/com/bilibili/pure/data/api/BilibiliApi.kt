@@ -10,7 +10,10 @@ import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
@@ -45,6 +48,21 @@ interface BilibiliApi {
         @Query("pn") pn: Int = 1
     ): ApiResponse<CommentList>
 
+    @FormUrlEncoded
+    @POST("x/v2/history/report")
+    suspend fun reportProgress(
+        @Field("aid") aid: Long,
+        @Field("cid") cid: Long,
+        @Field("progress") progress: Long,
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
+    @GET("x/v2/history")
+    suspend fun getHistory(
+        @Query("pn") page: Int = 1,
+        @Query("ps") pageSize: Int = 20
+    ): ApiResponse<List<HistoryItem>>
+
     @GET("x/player/playurl")
     suspend fun getPlayUrl(
         @Query("bvid") bvid: String,
@@ -60,9 +78,11 @@ interface BilibiliApi {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String
         var loginCookies: String = ""
+        var biliJct: String = ""
 
         fun setLoginCookies(sessdata: String, biliJct: String, dedeUserId: String) {
             loginCookies = "SESSDATA=$sessdata; bili_jct=$biliJct; DedeUserID=$dedeUserId"
+            this.biliJct = biliJct
         }
 
         val httpClient: OkHttpClient by lazy {
