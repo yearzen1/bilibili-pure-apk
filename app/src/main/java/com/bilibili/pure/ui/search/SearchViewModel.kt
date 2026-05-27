@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
+import com.bilibili.pure.data.local.SearchHistoryManager
 import com.bilibili.pure.data.model.SearchVideoItem
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.Job
@@ -36,17 +37,26 @@ data class SearchUiState(
     val error: String? = null,
     val currentPage: Int = 1,
     val hasMore: Boolean = false,
-    val sortBy: SearchSortOption = SearchSort.options[0]
+    val sortBy: SearchSortOption = SearchSort.options[0],
+    val searchHistory: List<String> = emptyList()
 )
 
 class SearchViewModel(
     private val repository: BilibiliRepository = BilibiliRepository()
 ) : ViewModel() {
 
+    private val historyManager = SearchHistoryManager(
+        BilibiliApp.instance.getSharedPreferences("bili_prefs", android.content.Context.MODE_PRIVATE)
+    )
+
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+
+    init {
+        _uiState.value = _uiState.value.copy(searchHistory = historyManager.load())
+    }
 
     fun onQueryChange(query: String) {
         _uiState.value = _uiState.value.copy(query = query)
@@ -69,6 +79,10 @@ class SearchViewModel(
         searchJob = viewModelScope.launch {
             delay(500)
             if (query != _uiState.value.query.trim() || order != _uiState.value.sortBy.value) return@launch
+
+            val newHistory = historyManager.add(query)
+            _uiState.value = _uiState.value.copy(searchHistory = newHistory)
+
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, results = emptyList(), currentPage = 1)
             repository.search(query, page = 1, order = order)
                 .onSuccess { (results, totalPages) ->
@@ -131,5 +145,20 @@ class SearchViewModel(
                     _uiState.value = _uiState.value.copy(isLoadingMore = false)
                 }
         }
+    }
+
+    fun clearHistory() {
+        val cleared = historyManager.clear()
+        _uiState.value = _uiState.value.copy(searchHistory = cleared)
+    }
+
+    fun removeFromHistory(query: String) {
+        val updated = historyManager.remove(query)
+        _uiState.value = _uiState.value.copy(searchHistory = updated)
+    }
+
+    fun searchFromHistory(query: String) {
+        _uiState.value = _uiState.value.copy(query = query)
+        search()
     }
 }

@@ -17,6 +17,7 @@
 | 个人中心 | 登录状态展示、退出登录 |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
 | 观看历史 | 30 秒心跳上报播放进度到 B 站服务器，暂停/退出/切 P 时同步 |
+| 搜索历史 | 保存最近 10 条搜索记录到本地 SharedPreferences，支持单条删除和清空 |
 
 ## 使用的 API
 
@@ -83,6 +84,23 @@ Bilibili Web 端部分接口（如 `x/space/wbi/arc/search`）需要 WBI 签名�
 ### Coil 缓存
 - 内存缓存：16MB LRU
 - 磁盘缓存：50MB
+
+## 环境要求
+
+| 项目 | 版本 |
+|---|---|
+| JDK | 17 |
+| Android SDK | 34（已内置在 `android-sdk/`） |
+| Gradle | 8.7（wrapper 自动下载） |
+| 设备 | Android 7.0+（`minSdk = 24`） |
+
+```bash
+# 构建
+./gradlew assembleDebug
+
+# 安装（需连接设备并开启 USB 调试）
+android-sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
 ## 已知问题
 

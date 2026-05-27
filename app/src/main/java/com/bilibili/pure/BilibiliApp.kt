@@ -13,6 +13,7 @@ class BilibiliApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         val prefs = getSharedPreferences("bili_prefs", MODE_PRIVATE)
         if (!prefs.contains("buvid3")) {
             prefs.edit().putString("buvid3", UUID.randomUUID().toString()).apply()
@@ -48,5 +49,7 @@ class BilibiliApp : Application(), ImageLoaderFactory {
 
     companion object {
         const val TAG = "BiliPure"
+        lateinit var instance: BilibiliApp
+            private set
     }
 }
