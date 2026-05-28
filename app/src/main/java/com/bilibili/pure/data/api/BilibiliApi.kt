@@ -262,8 +262,8 @@ interface BilibiliApi {
                             .header("Sec-Fetch-Mode", "cors")
                             .header("Sec-Fetch-Site", "same-site")
                     }
-                    // WBI signing for /wbi/ endpoints
-                    if (!isCdn && url.contains("/wbi/")) {
+                    // WBI signing for endpoints that require w_rid/wts
+                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type"))) {
                         val httpUrl = url.toHttpUrlOrNull()
                         if (httpUrl != null) {
                             val params = mutableMapOf<String, String>()
