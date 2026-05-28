@@ -186,8 +186,11 @@ private fun HistoryCard(
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
     val viewTime = remember(item.viewAt) { dateFormat.format(Date(item.viewAt * 1000)) }
 
-    val progressFraction = if (item.duration > 0) {
-        (item.progress.toFloat() / item.duration.toFloat()).coerceIn(0f, 1f)
+    val pDuration = item.page?.duration?.takeIf { it > 0 }
+    val effectiveDuration = pDuration ?: item.duration
+
+    val progressFraction = if (effectiveDuration > 0) {
+        (item.progress.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     Card(
@@ -220,6 +223,16 @@ private fun HistoryCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (item.videos > 1) {
+                    val pageNum = item.page?.page ?: 1
+                    val pageLabel = if (item.page?.part.isNullOrEmpty()) "P$pageNum" else "P$pageNum ${item.page?.part}"
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = pageLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = { progressFraction },
@@ -228,11 +241,19 @@ private fun HistoryCard(
                         .height(4.dp),
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${formatDuration(item.progress)} / ${formatDuration(item.duration)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (item.videos > 1 && pDuration != null) {
+                    Text(
+                        text = "${formatDuration(item.progress)} / ${formatDuration(pDuration)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "${formatDuration(item.progress)} / ${formatDuration(item.duration)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     text = viewTime,
                     style = MaterialTheme.typography.labelSmall,

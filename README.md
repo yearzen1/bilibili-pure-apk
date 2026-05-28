@@ -6,7 +6,7 @@
 
 | 功能 | 说明 |
 |---|---|
-| 视频搜索 | 支持 5 种排序（综合/播放/发布/弹幕/收藏）、分页加载、左右滑动切换排序 |
+| 视频搜索 | 支持 5 种排序（综合/播放/发布/弹幕/收藏）、分页加载、左右滑动切换排序、搜索历史记录持久化 |
 | 视频详情 | 多 P 选集、描述展开/折叠、发布日期、封面 |
 | 原生播放 | ExoPlayer 播放 MP4 直链，支持全屏（传感器横屏）、手势控制 |
 | 手势控制 | 双击播放/暂停、长按倍速（松手恢复 1x）、左侧调亮度、右侧调音量 |
@@ -16,7 +16,7 @@
 | 登录 | 二维码登录 + 密码登录（WebView 方式） |
 | 个人中心 | 登录状态展示、退出登录 |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
-| 观看历史 | 30 秒心跳上报播放进度到 B 站服务器，暂停/退出/切 P 时同步 |
+| 观看历史 | 分 P 进度显示、30 秒心跳上报、全量缓存标题搜索、回到顶部按钮 |
 | 搜索历史 | 保存最近 10 条搜索记录到本地 SharedPreferences，支持单条删除和清空 |
 
 ## 使用的 API
@@ -32,7 +32,7 @@
 | 二维码生成 | `api.bilibili.com/x/passport-login/oauth2/qrcode/generate` | 登录二维码 | ✅ |
 | 二维码轮询 | `api.bilibili.com/x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
 | 进度上报 | `api.bilibili.com/x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
-| 观看历史 | `api.bilibili.com/x/v2/history` | 视频历史记录 | ✅ |
+| 观看历史 | `api.bilibili.com/x/v2/history` | 视频历史记录（返回 `HistoryPage` 对象含 `page`/`part`/`duration`） | ✅ |
 
 ## 技术栈
 
@@ -80,6 +80,23 @@ Bilibili Web 端部分接口（如 `x/space/wbi/arc/search`）需要 WBI 签名�
 - **切 P**：切换分 P 前上报当前分 P 的进度
 - **身份认证**：需登录（`SESSDATA`/`bili_jct`/`DedeUserID`），且 `csrf` 表单字段必须等于 `bili_jct` cookie 值
 - **progress 单位**：秒（`player.currentPosition / 1000`，最小 1）
+
+### 观看历史搜索
+通过 Repository 全量缓存实现本地搜索，避免多 P 状态污染：
+
+1. `BilibiliRepository.getAllHistory()` 内部缓存所有分页数据（`fullHistoryCache`），仅首次搜索时请求一次
+2. `HistoryViewModel` 维护两个独立列表：
+   - `items` — 分页浏览（`loadHistory` + `loadMore` 维护）
+   - `searchResults` — 搜索结果（`searchInHistory` 唯一写入点）
+3. `HistoryScreen` 通过 `derivedStateOf` 切换 `displayItems`：搜索时取 `searchResults`，否则取 `items`
+4. 清空搜索时 `searchResults = emptyList`，`items` 不受影响，分页继续正常加载
+
+### 多 P 进度显示
+Bilibili 历史 API 返回的 `page` 字段为嵌套对象 `HistoryPage(page, part, duration, cid)`：
+- `duration` - 视频总时长（所有分 P 之和）
+- `progress` - 当前分 P 内的播放进度（非累积）
+- `page.duration` - 当前分 P 的单独时长
+- 进度条以当前分 P 时长 `page.duration` 为分母，进度文本显示 `0:01 / 6:37`，上方 P 标签标识当前分 P
 
 ### Coil 缓存
 - 内存缓存：16MB LRU

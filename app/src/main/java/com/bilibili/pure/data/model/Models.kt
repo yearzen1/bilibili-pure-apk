@@ -115,6 +115,13 @@ data class DurlItem(
     val size: Long
 )
 
+data class HistoryPage(
+    val page: Int = 1,
+    val part: String = "",
+    val duration: Long = 0,
+    val cid: Long = 0
+)
+
 data class HistoryItem(
     val bvid: String,
     val aid: Long,
@@ -124,7 +131,10 @@ data class HistoryItem(
     val stat: VideoStat,
     val duration: Long,
     val progress: Long,
-    @SerializedName("view_at") val viewAt: Long
+    @SerializedName("view_at") val viewAt: Long,
+    val cid: Long = 0,
+    val page: HistoryPage? = null,
+    val videos: Int = 1
 )
 
 data class QRLoginData(
