@@ -6,7 +6,8 @@
     <application
         android:name=".BilibiliApp"
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="BiliPure"
         android:supportsRtl="true"
         android:theme="@style/Theme.BilibiliPure">

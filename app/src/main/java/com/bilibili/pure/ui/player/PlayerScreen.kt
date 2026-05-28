@@ -91,6 +91,22 @@ fun PlayerScreen(
                         else -> "UNKNOWN"
                     }
                     Log.d(BilibiliApp.TAG, "Player: state=$s")
+
+                    if (state == Player.STATE_ENDED) {
+                        val st = vm.uiState.value
+                        if (!st.isLoading && st.pages.size > 1) {
+                            val currentIdx = st.pages.indexOfFirst { it.cid == st.currentPage?.cid }
+                            if (currentIdx in 0 until st.pages.size - 1) {
+                                val nextPage = st.pages[currentIdx + 1]
+                                val aid = st.videoInfo?.aid
+                                val cid = st.currentPage?.cid
+                                if (aid != null && cid != null && this@apply.currentPosition > 0) {
+                                    vm.reportProgress(aid, cid, (this@apply.currentPosition / 1000).coerceAtLeast(1))
+                                }
+                                vm.selectPage(nextPage)
+                            }
+                        }
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
@@ -365,9 +381,9 @@ private fun PlayerContent(
                                         setOnClickListener { anchor ->
                                             val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
                                             val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
-                                            val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                                            val speeds = listOf(0.5f, 1.0f, 2.0f, 3.0f)
                                             speeds.forEachIndexed { i, speed ->
-                                                popup.menu.add(0, i, 0, "%.2gx".format(speed)).apply {
+                                                popup.menu.add(0, i, 0, "%.1fx".format(speed)).apply {
                                                     if (speed == speedCtl.baseSpeed) isChecked = true
                                                  }
                                              }
