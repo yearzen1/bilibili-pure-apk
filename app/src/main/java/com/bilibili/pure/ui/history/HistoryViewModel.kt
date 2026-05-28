@@ -13,8 +13,11 @@ import kotlinx.coroutines.launch
 
 data class HistoryUiState(
     val items: List<HistoryItem> = emptyList(),
+    val searchResults: List<HistoryItem> = emptyList(),
+    val searchQuery: String = "",
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
+    val isSearchLoading: Boolean = false,
     val error: String? = null,
     val currentPage: Int = 1,
     val hasMore: Boolean = false
@@ -31,6 +34,7 @@ class HistoryViewModel(
         Log.d(BilibiliApp.TAG, "loadHistory")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            repository.clearHistoryCache()
             repository.getHistory(page = 1)
                 .onSuccess { list ->
                     Log.d(BilibiliApp.TAG, "loadHistory success: ${list.size} items")
@@ -71,6 +75,37 @@ class HistoryViewModel(
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "loadMore error: ${e.message}")
                     _uiState.value = _uiState.value.copy(isLoadingMore = false)
+                }
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        if (query.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                searchQuery = "", searchResults = emptyList(), isSearchLoading = false
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+        searchInHistory(query)
+    }
+
+    private fun searchInHistory(query: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSearchLoading = true)
+            repository.getAllHistory()
+                .onSuccess { all ->
+                    _uiState.value = _uiState.value.copy(
+                        searchResults = all.filter { it.title.contains(query, ignoreCase = true) },
+                        isSearchLoading = false
+                    )
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "searchInHistory error: ${e.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isSearchLoading = false,
+                        error = e.message ?: "加载失败"
+                    )
                 }
         }
     }

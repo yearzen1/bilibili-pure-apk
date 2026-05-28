@@ -51,6 +51,32 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getHistory failed", it) }
     }
 
+    private var fullHistoryCache: List<HistoryItem>? = null
+
+    suspend fun getAllHistory(): Result<List<HistoryItem>> {
+        fullHistoryCache?.let { return Result.success(it) }
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getAllHistory: start")
+        val all = mutableListOf<HistoryItem>()
+        var page = 1
+        while (true) {
+            val r = getHistory(page = page)
+            if (r.isFailure) return Result.failure(
+                r.exceptionOrNull() ?: Exception("Unknown error")
+            )
+            val list = r.getOrNull() ?: break
+            all.addAll(list)
+            if (list.size < 20) break
+            page++
+        }
+        fullHistoryCache = all
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getAllHistory: done, ${all.size} items")
+        return Result.success(all)
+    }
+
+    fun clearHistoryCache() {
+        fullHistoryCache = null
+    }
+
     suspend fun reportProgress(aid: Long, cid: Long, progress: Long): Result<Unit> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress: aid=$aid cid=$cid progress=${progress}s")
         return runCatching {

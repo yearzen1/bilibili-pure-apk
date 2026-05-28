@@ -5,17 +5,26 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.HistoryItem
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,6 +38,7 @@ fun HistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(Unit) {
         viewModel.loadHistory()
@@ -46,6 +56,18 @@ fun HistoryScreen(
         if (shouldLoadMore) viewModel.loadMore()
     }
 
+    val displayItems by remember {
+        derivedStateOf {
+            if (uiState.searchQuery.isBlank()) uiState.items
+            else uiState.searchResults
+        }
+    }
+
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 2 && displayItems.isNotEmpty() }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("观看历史") },
@@ -56,8 +78,29 @@ fun HistoryScreen(
             }
         )
 
+        OutlinedTextField(
+            value = uiState.searchQuery,
+            onValueChange = { viewModel.setSearchQuery(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            placeholder = { Text("搜索历史记录") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (uiState.searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "清除")
+                    }
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            shape = RoundedCornerShape(24.dp)
+        )
+
         when {
-            uiState.isLoading && uiState.items.isEmpty() -> {
+            uiState.isLoading && uiState.items.isEmpty() && uiState.searchQuery.isBlank() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -67,32 +110,60 @@ fun HistoryScreen(
                     Text("加载失败：${uiState.error}")
                 }
             }
-            uiState.items.isEmpty() -> {
+            uiState.items.isEmpty() && uiState.searchQuery.isBlank() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("暂无观看记录")
                 }
             }
-            else -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(uiState.items, key = { it.bvid + it.viewAt }) { item ->
-                        HistoryCard(
-                            item = item,
-                            onClick = { onVideoClick(item.bvid) }
-                        )
+            uiState.isSearchLoading && displayItems.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("正在搜索历史记录…")
                     }
-                    if (uiState.isLoadingMore) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            }
+            uiState.searchQuery.isNotBlank() && displayItems.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("没有找到匹配的视频")
+                }
+            }
+            else -> {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(displayItems, key = { it.bvid + it.viewAt }) { item ->
+                            HistoryCard(
+                                item = item,
+                                onClick = { onVideoClick(item.bvid) }
+                            )
+                        }
+                        if (uiState.isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
                             }
+                        }
+                    }
+
+                    if (showScrollToTop) {
+                        FloatingActionButton(
+                            onClick = { scope.launch { listState.scrollToItem(0) } },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
                         }
                     }
                 }
