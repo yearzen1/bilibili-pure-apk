@@ -59,6 +59,9 @@ class SearchViewModel(
     }
 
     fun onQueryChange(query: String) {
+        if (query.isEmpty() && _uiState.value.query.isNotEmpty()) {
+            Log.d(BilibiliApp.TAG, "onQueryChange: query cleared (from X button)")
+        }
         _uiState.value = _uiState.value.copy(query = query)
     }
 
@@ -71,7 +74,10 @@ class SearchViewModel(
 
     fun search() {
         val query = _uiState.value.query.trim()
-        if (query.isEmpty()) return
+        if (query.isEmpty()) {
+            Log.d(BilibiliApp.TAG, "search: skipped due to empty query")
+            return
+        }
 
         val order = _uiState.value.sortBy.value
         Log.d(BilibiliApp.TAG, "search: query=$query sort=$order")
@@ -160,5 +166,19 @@ class SearchViewModel(
     fun searchFromHistory(query: String) {
         _uiState.value = _uiState.value.copy(query = query)
         search()
+    }
+
+    fun clearResults() {
+        Log.d(BilibiliApp.TAG, "clearResults: called from FAB")
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            query = "",
+            results = emptyList(),
+            hasMore = false,
+            currentPage = 1,
+            error = null,
+            isLoading = false,
+            isLoadingMore = false
+        )
     }
 }

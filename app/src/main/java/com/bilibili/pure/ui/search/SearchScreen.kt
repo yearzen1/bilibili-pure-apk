@@ -187,6 +187,28 @@ fun SearchScreen(
                 val showScrollToTop by remember {
                     derivedStateOf { listState.firstVisibleItemIndex > 2 }
                 }
+                var showClearDialog by remember { mutableStateOf(false) }
+
+                if (showClearDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearDialog = false },
+                        title = { Text("清空搜索结果") },
+                        text = { Text("确定要清空当前搜索结果和搜索关键词吗？") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                viewModel.clearResults()
+                                showClearDialog = false
+                            }) {
+                                Text("确定")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearDialog = false }) {
+                                Text("取消")
+                            }
+                        }
+                    )
+                }
 
                 Box(
                     modifier = Modifier
@@ -246,6 +268,18 @@ fun SearchScreen(
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                             }
+                        }
+                    }
+
+                    if (uiState.results.isNotEmpty()) {
+                        FloatingActionButton(
+                            onClick = { showClearDialog = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(Icons.Default.Clear, contentDescription = "清空结果")
                         }
                     }
 
