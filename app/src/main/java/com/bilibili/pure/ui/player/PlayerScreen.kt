@@ -67,6 +67,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     var isFullscreen by remember { mutableStateOf(false) }
     var playing by remember { mutableStateOf(false) }
+    var initialSeekDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(bvid) {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
@@ -101,7 +102,7 @@ fun PlayerScreen(
                                 val aid = st.videoInfo?.aid
                                 val cid = st.currentPage?.cid
                                 if (aid != null && cid != null && this@apply.currentPosition > 0) {
-                                    vm.reportProgress(aid, cid, (this@apply.currentPosition / 1000).coerceAtLeast(1))
+                                    vm.reportProgress(aid, cid, (this@apply.currentPosition / 1000).coerceAtLeast(1), (this@apply.duration / 1000).coerceAtLeast(0))
                                 }
                                 vm.selectPage(nextPage)
                             }
@@ -128,7 +129,7 @@ fun PlayerScreen(
             val aid = uiState.videoInfo?.aid
             val cid = uiState.currentPage?.cid
             if (aid != null && cid != null && player.currentPosition > 0) {
-                vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
+                vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1), (player.duration / 1000).coerceAtLeast(0))
             }
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
             player.run {
@@ -159,6 +160,21 @@ fun PlayerScreen(
                 .createMediaSource(mediaItem)
             player.setMediaSource(mediaSource)
             player.prepare()
+
+            if (!initialSeekDone && uiState.historyProgress > 0L && uiState.historyCid == uiState.currentPage?.cid) {
+                val seekMs = uiState.historyProgress * 1000L
+                Log.d(BilibiliApp.TAG, "PlayerScreen: will seek to ${seekMs}ms on ready (history progress)")
+                val listener = object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_READY) {
+                            player.seekTo(seekMs)
+                            player.removeListener(this)
+                        }
+                    }
+                }
+                player.addListener(listener)
+                initialSeekDone = true
+            }
         }
     }
 
@@ -169,11 +185,11 @@ fun PlayerScreen(
             delay(30_000)
             while (true) {
                 val progress = (player.currentPosition / 1000).coerceAtLeast(1)
-                vm.reportProgress(aid, cid, progress)
+                vm.reportProgress(aid, cid, progress, (player.duration / 1000).coerceAtLeast(0))
                 delay(30_000)
             }
         } else if (player.currentPosition > 0) {
-            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
+            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1), (player.duration / 1000).coerceAtLeast(0))
         }
     }
 
@@ -277,7 +293,7 @@ fun PlayerScreen(
                                         val aid = uiState.videoInfo?.aid
                                         val cid = uiState.currentPage?.cid
                                         if (aid != null && cid != null && player.currentPosition > 0) {
-                                            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1))
+                                            vm.reportProgress(aid, cid, (player.currentPosition / 1000).coerceAtLeast(1), (player.duration / 1000).coerceAtLeast(0))
                                         }
                                         vm.selectPage(page)
                                     }
