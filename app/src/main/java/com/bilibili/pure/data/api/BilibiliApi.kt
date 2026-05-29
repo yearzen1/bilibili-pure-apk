@@ -87,6 +87,20 @@ interface BilibiliApi {
         @Query("platform") platform: String = "android"
     ): ApiResponse<PlayUrlInfo>
 
+    @GET("x/v3/fav/folder/created/list-all")
+    suspend fun getFavFolders(
+        @Query("up_mid") upMid: Long,
+        @Query("type") type: Int = 0
+    ): ApiResponse<FavFolderList>
+
+    @GET("x/v3/fav/resource/list")
+    suspend fun getFavResources(
+        @Query("media_id") mediaId: Long,
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20,
+        @Query("platform") platform: String = "web"
+    ): ApiResponse<FavResourceList>
+
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String

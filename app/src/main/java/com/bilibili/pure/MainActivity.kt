@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
+import com.bilibili.pure.ui.favorites.FavoritesScreen
 import com.bilibili.pure.ui.history.HistoryScreen
 import com.bilibili.pure.ui.login.LoginScreen
 import com.bilibili.pure.ui.navigation.Routes
@@ -93,7 +94,8 @@ fun MainScreen() {
             composable(Screen.Profile.route) {
                 ProfileScreen(
                     onLoginClick = { navController.navigate(Routes.LOGIN) },
-                    onHistoryClick = { navController.navigate(Routes.HISTORY) }
+                    onHistoryClick = { navController.navigate(Routes.HISTORY) },
+                    onFavoritesClick = { navController.navigate(Routes.FAVORITES) }
                 )
             }
 
@@ -135,6 +137,15 @@ fun MainScreen() {
 
             composable(route = Routes.HISTORY) {
                 HistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid ->
+                        navController.navigate(Routes.detail(bvid))
+                    }
+                )
+            }
+
+            composable(route = Routes.FAVORITES) {
+                FavoritesScreen(
                     onBack = { navController.popBackStack() },
                     onVideoClick = { bvid ->
                         navController.navigate(Routes.detail(bvid))

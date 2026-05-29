@@ -177,3 +177,52 @@ data class UserSpacePage(
     val ps: Int = 30,
     val count: Int = 0
 )
+
+data class FavFolderList(
+    val count: Int = 0,
+    val list: List<FavFolder>? = null
+)
+
+data class FavFolder(
+    val id: Long,
+    val title: String,
+    @SerializedName("media_count") val mediaCount: Int,
+    val cover: String? = null,
+    val upper: FavFolderOwner? = null
+)
+
+data class FavFolderOwner(
+    val mid: Long,
+    val name: String,
+    val face: String? = null
+)
+
+data class FavResourceList(
+    val medias: List<FavResourceItem>? = null,
+    @SerializedName("has_more") val hasMore: Boolean = false
+)
+
+data class FavResourceItem(
+    val id: Long,
+    val type: Int,
+    val title: String,
+    val cover: String,
+    val upper: FavResourceUpper,
+    @SerializedName("cnt_info") val cntInfo: FavResourceCntInfo? = null,
+    val duration: Long = 0,
+    val pubtime: Long = 0,
+    val bvid: String = "",
+    val aid: Long = 0
+)
+
+data class FavResourceUpper(
+    val mid: Long,
+    val name: String,
+    val face: String? = null
+)
+
+data class FavResourceCntInfo(
+    val play: Long = 0,
+    val danmaku: Long = 0,
+    val collect: Long = 0
+)

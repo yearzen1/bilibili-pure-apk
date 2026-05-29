@@ -20,6 +20,7 @@ object Routes {
     const val LOGIN = "login"
     const val HISTORY = "history"
     const val CHANNEL = "channel/{mid}"
+    const val FAVORITES = "favorites"
 
     fun detail(bvid: String) = "detail/$bvid"
     fun player(bvid: String) = "player/$bvid"

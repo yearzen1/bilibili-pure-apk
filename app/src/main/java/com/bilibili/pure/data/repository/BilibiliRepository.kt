@@ -102,6 +102,33 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getUserVideos failed", it) }
     }
 
+    suspend fun getFavFolders(upMid: Long): Result<List<FavFolder>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid")
+        return runCatching {
+            val response = api.getFavFolders(upMid = upMid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                response.data?.list ?: emptyList()
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getFavFolders failed", it) }
+    }
+
+    suspend fun getFavResources(mediaId: Long, page: Int = 1): Result<Pair<List<FavResourceItem>, Boolean>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources: mediaId=$mediaId page=$page")
+        return runCatching<Pair<List<FavResourceItem>, Boolean>> {
+            val response = api.getFavResources(mediaId = mediaId, pn = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                val data = response.data
+                Pair(data?.medias ?: emptyList(), data?.hasMore ?: false)
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getFavResources failed", it) }
+    }
+
     suspend fun getPlayUrl(bvid: String, cid: Long, qn: Int = 80): Result<String> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn fnval=1 platform=android")
         return runCatching {
