@@ -7,9 +7,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -100,7 +102,11 @@ fun DetailScreen(
                     onToggleReplies = { rpid -> viewModel.toggleReplies(uiState.videoInfo!!.aid, rpid) },
                     loadingMore = uiState.loadingMore,
                     hasMoreComments = uiState.hasMoreComments,
-                    onLoadMoreComments = { viewModel.loadMoreComments(uiState.videoInfo!!.aid) }
+                    onLoadMoreComments = { viewModel.loadMoreComments(uiState.videoInfo!!.aid) },
+                    isFavorited = uiState.isFavorited,
+                    favoriteCount = uiState.favoriteCount,
+                    isTogglingFavorite = uiState.isTogglingFavorite,
+                    onToggleFavorite = { viewModel.toggleFavorite(uiState.videoInfo!!.aid) }
                 )
             }
         }
@@ -119,7 +125,11 @@ private fun DetailContent(
     onToggleReplies: (rpid: Long) -> Unit = {},
     loadingMore: Boolean = false,
     hasMoreComments: Boolean = true,
-    onLoadMoreComments: () -> Unit = {}
+    onLoadMoreComments: () -> Unit = {},
+    isFavorited: Boolean = false,
+    favoriteCount: Long = 0,
+    isTogglingFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
 
@@ -203,11 +213,27 @@ private fun DetailContent(
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatChip("播放", formatCount(videoInfo.stat.view))
                     StatChip("点赞", formatCount(videoInfo.stat.like))
                     StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
                     StatChip("评论", formatCount(videoInfo.stat.reply))
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        enabled = !isTogglingFavorite
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (isFavorited) "取消收藏" else "收藏",
+                            tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = formatCount(favoriteCount),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

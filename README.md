@@ -7,7 +7,7 @@
 | 功能 | 说明 |
 |---|---|
 | 视频搜索 | 支持 5 种排序（综合/播放/发布/弹幕/收藏）、分页加载、左右滑动切换排序、搜索历史记录持久化 |
-| 视频详情 | 多 P 选集、描述展开/折叠、发布日期、封面 |
+| 视频详情 | 多 P 选集、描述展开/折叠、发布日期、封面、收藏按钮（心形切换，仅登录显示） |
 | 原生播放 | ExoPlayer 播放 MP4 直链，支持全屏（传感器横屏）、手势控制 |
 | 手势控制 | 双击播放/暂停、长按倍速（松手恢复 1x）、左侧调亮度、右侧调音量 |
 | 速度控制 | 弹出菜单（0.5x–2.0x）、长按快速切换 |
@@ -17,6 +17,7 @@
 | 个人中心 | 登录状态展示、退出登录 |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
 | 观看历史 | 分 P 进度显示、30 秒心跳上报、全量缓存标题搜索、回到顶部按钮 |
+| 我的收藏 | 收藏夹列表 → 视频列表两级浏览、分页加载、BackHandler 拦截系统返回手势 |
 | 搜索历史 | 保存最近 10 条搜索记录到本地 SharedPreferences，支持单条删除和清空 |
 
 ## 使用的 API
@@ -33,6 +34,10 @@
 | 二维码轮询 | `api.bilibili.com/x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
 | 进度上报 | `api.bilibili.com/x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
 | 观看历史 | `api.bilibili.com/x/v2/history` | 视频历史记录（返回 `HistoryPage` 对象含 `page`/`part`/`duration`） | ✅ |
+| 收藏夹列表 | `api.bilibili.com/x/v3/fav/folder/created/list-all` | 获取用户收藏夹列表（需登录） | ✅ |
+| 收藏夹内容 | `api.bilibili.com/x/v3/fav/resource/list` | 收藏夹内视频资源分页（需登录） | ✅ |
+| 收藏状态 | `api.bilibili.com/x/v2/fav/video/favoured` | 查询当前用户是否已收藏视频（需登录） | ✅ |
+| 收藏/取消收藏 | `api.bilibili.com/x/v3/fav/resource/deal` | 添加/移出收藏夹（POST，需 csrf） | ✅ |
 
 ## 技术栈
 

@@ -101,6 +101,21 @@ interface BilibiliApi {
         @Query("platform") platform: String = "web"
     ): ApiResponse<FavResourceList>
 
+    @GET("x/v2/fav/video/favoured")
+    suspend fun getFavoured(
+        @Query("aid") aid: Long
+    ): ApiResponse<FavouredData>
+
+    @FormUrlEncoded
+    @POST("x/v3/fav/resource/deal")
+    suspend fun dealFavResource(
+        @Field("rid") rid: Long,
+        @Field("type") type: Int = 2,
+        @Field("add_media_ids") addMediaIds: String,
+        @Field("del_media_ids") delMediaIds: String,
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String

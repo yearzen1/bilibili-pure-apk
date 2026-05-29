@@ -129,6 +129,35 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getFavResources failed", it) }
     }
 
+    suspend fun checkFavoured(aid: Long): Result<Boolean> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "checkFavoured: aid=$aid")
+        return runCatching {
+            val response = api.getFavoured(aid = aid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "checkFavoured response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                response.data?.favoured ?: false
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "checkFavoured failed", it) }
+    }
+
+    suspend fun dealFavResource(rid: Long, addMediaIds: String, delMediaIds: String): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "dealFavResource: rid=$rid add=$addMediaIds del=$delMediaIds")
+        return runCatching {
+            val response = api.dealFavResource(
+                rid = rid,
+                addMediaIds = addMediaIds,
+                delMediaIds = delMediaIds,
+                csrf = BilibiliApi.biliJct
+            )
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "dealFavResource response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "dealFavResource failed", it) }
+    }
+
     suspend fun getPlayUrl(bvid: String, cid: Long, qn: Int = 80): Result<String> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrl: bvid=$bvid cid=$cid qn=$qn fnval=1 platform=android")
         return runCatching {

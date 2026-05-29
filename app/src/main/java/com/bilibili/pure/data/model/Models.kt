@@ -226,3 +226,7 @@ data class FavResourceCntInfo(
     val danmaku: Long = 0,
     val collect: Long = 0
 )
+
+data class FavouredData(
+    val favoured: Boolean = false
+)

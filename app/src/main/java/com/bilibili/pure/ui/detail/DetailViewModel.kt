@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
+import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentItem
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
@@ -28,8 +29,15 @@ data class DetailUiState(
     val expandedReplies: Set<Long> = emptySet(),
     val nextCursor: Int = 0,
     val hasMoreComments: Boolean = true,
-    val loadingMore: Boolean = false
-)
+    val loadingMore: Boolean = false,
+    val isFavorited: Boolean = false,
+    val favoriteCount: Long = 0,
+    val isTogglingFavorite: Boolean = false,
+    private val defaultFolderId: Long? = null
+) {
+    fun getDefaultFolderId() = defaultFolderId
+    fun withDefaultFolderId(id: Long) = copy(defaultFolderId = id)
+}
 
 class DetailViewModel(
     private val repository: BilibiliRepository = BilibiliRepository()
@@ -48,9 +56,11 @@ class DetailViewModel(
                     Log.d(BilibiliApp.TAG, "detail loaded: title=${info.title} aid=${info.aid}")
                     _uiState.value = _uiState.value.copy(
                         videoInfo = info,
-                        isLoading = false
+                        isLoading = false,
+                        favoriteCount = info.stat.favorite
                     )
                     loadComments(info.aid)
+                    checkFavoured(info.aid)
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "load detail failed: ${e.message}")
@@ -60,6 +70,71 @@ class DetailViewModel(
                     )
                 }
         }
+    }
+
+    private suspend fun checkFavoured(aid: Long) {
+        if (BilibiliApi.loginCookies.isEmpty()) return
+        repository.checkFavoured(aid)
+            .onSuccess { favoured ->
+                _uiState.value = _uiState.value.copy(isFavorited = favoured)
+            }
+            .onFailure { Log.e(BilibiliApp.TAG, "checkFavoured failed", it) }
+    }
+
+    fun toggleFavorite(aid: Long) {
+        val state = _uiState.value
+        if (state.isTogglingFavorite) return
+        _uiState.value = state.copy(isTogglingFavorite = true)
+
+        viewModelScope.launch {
+            var folderId = state.getDefaultFolderId()
+
+            if (folderId == null) {
+                val uid = BilibiliApi.loginCookies
+                    .split(";").firstOrNull { it.trim().startsWith("DedeUserID=") }
+                    ?.substringAfter("DedeUserID=")?.trim()?.toLongOrNull()
+                if (uid == null) {
+                    _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
+                    return@launch
+                }
+                repository.getFavFolders(uid)
+                    .onSuccess { folders ->
+                        val id = folders.firstOrNull()?.id
+                        if (id != null) {
+                            _uiState.value = _uiState.value.withDefaultFolderId(id)
+                            doToggleFavorite(aid, id)
+                        } else {
+                            _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
+                        }
+                    }
+                    .onFailure {
+                        _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
+                    }
+            } else {
+                doToggleFavorite(aid, folderId)
+            }
+        }
+    }
+
+    private suspend fun doToggleFavorite(aid: Long, folderId: Long) {
+        val state = _uiState.value
+        val add = if (state.isFavorited) "" else folderId.toString()
+        val del = if (state.isFavorited) folderId.toString() else ""
+
+        repository.dealFavResource(rid = aid, addMediaIds = add, delMediaIds = del)
+            .onSuccess {
+                val newFav = !state.isFavorited
+                val newCount = state.favoriteCount + if (newFav) 1 else -1
+                _uiState.value = _uiState.value.copy(
+                    isFavorited = newFav,
+                    favoriteCount = maxOf(0L, newCount),
+                    isTogglingFavorite = false
+                )
+            }
+            .onFailure { e ->
+                Log.e(BilibiliApp.TAG, "toggleFavorite failed", e)
+                _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
+            }
     }
 
     private suspend fun loadComments(aid: Long) {
