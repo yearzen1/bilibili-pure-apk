@@ -102,6 +102,20 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getUserVideos failed", it) }
     }
 
+    suspend fun searchChannelVideos(mid: Long, keyword: String, page: Int = 1): Result<Pair<List<UserVideoItem>, UserSpacePage?>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchChannelVideos: mid=$mid keyword=$keyword page=$page")
+        return runCatching<Pair<List<UserVideoItem>, UserSpacePage?>> {
+            val response = api.getUserVideos(mid = mid, keyword = keyword, page = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchChannelVideos response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                val data = response.data
+                Pair(data?.list?.vlist ?: emptyList(), data?.page)
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "searchChannelVideos failed", it) }
+    }
+
     suspend fun getFavFolders(upMid: Long): Result<List<FavFolder>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid")
         return runCatching {

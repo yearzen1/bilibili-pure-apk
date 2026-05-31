@@ -72,6 +72,7 @@ interface BilibiliApi {
     @GET("x/space/wbi/arc/search")
     suspend fun getUserVideos(
         @Query("mid") mid: Long,
+        @Query("keyword") keyword: String? = null,
         @Query("ps") pageSize: Int = 30,
         @Query("pn") page: Int = 1
     ): ApiResponse<UserSpaceData>

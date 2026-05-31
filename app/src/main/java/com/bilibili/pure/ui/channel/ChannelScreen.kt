@@ -1,32 +1,28 @@
 package com.bilibili.pure.ui.channel
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.model.UserVideoItem
-import com.bilibili.pure.ui.search.formatCount
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,21 +30,89 @@ fun ChannelScreen(
     mid: Long,
     onBack: () -> Unit,
     onVideoClick: (bvid: String) -> Unit,
+    onChannelSearch: (mid: Long, keyword: String) -> Unit,
     viewModel: ChannelViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var isSearching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(mid) {
         viewModel.load(mid)
     }
 
+    LaunchedEffect(isSearching) {
+        if (isSearching) {
+            searchQuery = ""
+            delay(200)
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("UP主视频") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    IconButton(onClick = {
+                        if (isSearching) {
+                            isSearching = false
+                            keyboardController?.hide()
+                        } else {
+                            onBack()
+                        }
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (isSearching) "取消" else "返回"
+                        )
+                    }
+                },
+                title = {
+                    if (isSearching) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                            placeholder = { Text("搜索UP主视频") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedContainerColor = Color.Transparent,
+                            ),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    if (searchQuery.isNotBlank()) {
+                                        isSearching = false
+                                        keyboardController?.hide()
+                                        onChannelSearch(mid, searchQuery.trim())
+                                    }
+                                }
+                            ),
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "清除")
+                                    }
+                                }
+                            }
+                        )
+                    } else {
+                        Text("UP主视频")
+                    }
+                },
+                actions = {
+                    if (!isSearching) {
+                        IconButton(onClick = { isSearching = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "搜索")
+                        }
                     }
                 }
             )
@@ -86,7 +150,7 @@ fun ChannelScreen(
 }
 
 @Composable
-private fun ChannelContent(
+internal fun ChannelContent(
     videos: List<UserVideoItem>,
     loadingMore: Boolean,
     hasMore: Boolean,
@@ -129,7 +193,7 @@ private fun ChannelContent(
         }
 
         items(videos, key = { it.bvid }) { video ->
-            VideoCard(video = video, onClick = { onVideoClick(video.bvid) })
+            ChannelVideoCard(video = video, onClick = { onVideoClick(video.bvid) })
         }
 
         item(key = "bottom") {
@@ -142,48 +206,6 @@ private fun ChannelContent(
                     videos.isNotEmpty() -> Text(
                         text = "已全部加载",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VideoCard(video: UserVideoItem, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = fixPic(video.pic),
-                contentDescription = video.title,
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(68.dp),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = video.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "${formatCount(video.playCount)}播放",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${formatCount(video.danmakuCount)}弹幕",
-                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

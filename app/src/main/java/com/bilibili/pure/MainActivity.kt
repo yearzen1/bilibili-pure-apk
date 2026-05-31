@@ -17,6 +17,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bilibili.pure.ui.channel.ChannelScreen
+import com.bilibili.pure.ui.channel.ChannelSearchScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.favorites.FavoritesScreen
 import com.bilibili.pure.ui.history.HistoryScreen
@@ -160,6 +161,28 @@ fun MainScreen() {
                 val mid = backStackEntry.arguments?.getLong("mid") ?: return@composable
                 ChannelScreen(
                     mid = mid,
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid ->
+                        navController.navigate(Routes.detail(bvid))
+                    },
+                    onChannelSearch = { _mid, keyword ->
+                        navController.navigate(Routes.channelSearch(_mid, keyword))
+                    }
+                )
+            }
+
+            composable(
+                route = Routes.CHANNEL_SEARCH,
+                arguments = listOf(
+                    navArgument("mid") { type = NavType.LongType },
+                    navArgument("keyword") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) { backStackEntry ->
+                val mid = backStackEntry.arguments?.getLong("mid") ?: return@composable
+                val keyword = backStackEntry.arguments?.getString("keyword") ?: ""
+                ChannelSearchScreen(
+                    mid = mid,
+                    keyword = keyword,
                     onBack = { navController.popBackStack() },
                     onVideoClick = { bvid ->
                         navController.navigate(Routes.detail(bvid))
