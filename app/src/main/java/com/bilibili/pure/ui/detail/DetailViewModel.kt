@@ -8,10 +8,12 @@ import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentItem
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ReplyThread(
     val items: List<CommentItem> = emptyList(),
@@ -33,6 +35,9 @@ data class DetailUiState(
     val isFavorited: Boolean = false,
     val favoriteCount: Long = 0,
     val isTogglingFavorite: Boolean = false,
+    val isLoggedIn: Boolean = false,
+    val isFollowed: Boolean = false,
+    val isTogglingFollow: Boolean = false,
     private val defaultFolderId: Long? = null
 ) {
     fun getDefaultFolderId() = defaultFolderId
@@ -48,9 +53,10 @@ class DetailViewModel(
 
     fun load(bvid: String) {
         Log.d(BilibiliApp.TAG, "load detail: bvid=$bvid")
-        viewModelScope.launch {
-            _uiState.value = DetailUiState(isLoading = true)
+        val isLoggedIn = BilibiliApi.loginCookies.isNotEmpty()
+        _uiState.value = DetailUiState(isLoading = true, isLoggedIn = isLoggedIn)
 
+        viewModelScope.launch {
             repository.getVideoInfo(bvid)
                 .onSuccess { info ->
                     Log.d(BilibiliApp.TAG, "detail loaded: title=${info.title} aid=${info.aid}")
@@ -61,6 +67,9 @@ class DetailViewModel(
                     )
                     loadComments(info.aid)
                     checkFavoured(info.aid)
+                    if (isLoggedIn) {
+                        checkFollowStatus(info.owner.mid)
+                    }
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "load detail failed: ${e.message}")
@@ -79,6 +88,38 @@ class DetailViewModel(
                 _uiState.value = _uiState.value.copy(isFavorited = favoured)
             }
             .onFailure { Log.e(BilibiliApp.TAG, "checkFavoured failed", it) }
+    }
+
+    private suspend fun checkFollowStatus(mid: Long) {
+        withContext(NonCancellable) {
+            repository.checkRelation(mid)
+        }
+            .onSuccess { followed ->
+                _uiState.value = _uiState.value.copy(isFollowed = followed)
+            }
+            .onFailure { e ->
+                Log.e(BilibiliApp.TAG, "checkRelation failed", e)
+            }
+    }
+
+    fun toggleFollowUploader(mid: Long) {
+        val state = _uiState.value
+        if (state.isTogglingFollow) return
+        _uiState.value = state.copy(isTogglingFollow = true)
+        viewModelScope.launch {
+            val act = if (state.isFollowed) 2 else 1
+            repository.modifyRelation(fid = mid, act = act)
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        isFollowed = !state.isFollowed,
+                        isTogglingFollow = false
+                    )
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "toggleFollow failed", e)
+                    _uiState.value = _uiState.value.copy(isTogglingFollow = false)
+                }
+        }
     }
 
     fun toggleFavorite(aid: Long) {

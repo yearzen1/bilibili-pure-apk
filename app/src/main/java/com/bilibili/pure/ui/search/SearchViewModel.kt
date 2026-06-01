@@ -94,7 +94,7 @@ class SearchViewModel(
                 .onSuccess { (results, totalPages) ->
                     Log.d(BilibiliApp.TAG, "search success: ${results.size} results, pages=$totalPages")
                     _uiState.value = _uiState.value.copy(
-                        results = results.distinctBy { it.bvid },
+                        results = results.distinctBy { it.bvid }.filter { it.bvid.isNotBlank() },
                         isLoading = false,
                         currentPage = 1,
                         hasMore = totalPages > 1
@@ -138,7 +138,7 @@ class SearchViewModel(
             repository.search(state.query, page = nextPage, order = state.sortBy.value)
                 .onSuccess { (results, totalPages) ->
                     val existingBvids = _uiState.value.results.map { it.bvid }.toSet()
-                    val deduped = results.filter { it.bvid !in existingBvids }
+                    val deduped = results.filter { it.bvid !in existingBvids && it.bvid.isNotBlank() }
                     _uiState.value = _uiState.value.copy(
                         results = _uiState.value.results + deduped,
                         isLoadingMore = false,

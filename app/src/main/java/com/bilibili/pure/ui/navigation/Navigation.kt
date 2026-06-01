@@ -22,9 +22,16 @@ object Routes {
     const val CHANNEL = "channel/{mid}"
     const val CHANNEL_SEARCH = "channelSearch/{mid}?keyword={keyword}"
     const val FAVORITES = "favorites"
+    const val FOLLOWING = "following"
 
-    fun detail(bvid: String) = "detail/$bvid"
-    fun player(bvid: String) = "player/$bvid"
+    fun detail(bvid: String): String {
+        if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
+        return "detail/$bvid"
+    }
+    fun player(bvid: String): String {
+        if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
+        return "player/$bvid"
+    }
     fun channel(mid: Long) = "channel/$mid"
     fun channelSearch(mid: Long, keyword: String): String {
         val encoded = java.net.URLEncoder.encode(keyword, "UTF-8")

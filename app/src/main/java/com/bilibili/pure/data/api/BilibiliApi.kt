@@ -117,6 +117,31 @@ interface BilibiliApi {
         @Field("csrf") csrf: String
     ): ApiResponse<Any>
 
+    @FormUrlEncoded
+    @POST("x/relation/modify")
+    suspend fun modifyRelation(
+        @Field("fid") fid: Long,
+        @Field("act") act: Int,
+        @Field("re_src") reSrc: Int = 14,
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
+    @GET("x/relation/followings")
+    suspend fun getFollowings(
+        @Query("vmid") vmid: Long,
+        @Query("ps") pageSize: Int = 50,
+        @Query("pn") page: Int = 1
+    ): ApiResponse<FollowingListData>
+
+    @GET("x/relation/stat")
+    suspend fun getRelationStat(@Query("vmid") vmid: Long): ApiResponse<RelationStat>
+
+    @GET("x/relation")
+    suspend fun getRelation(@Query("fid") fid: Long): ApiResponse<RelationData>
+
+    @GET("x/space/acc/info")
+    suspend fun getSpaceAccInfo(@Query("mid") mid: Long): ApiResponse<SpaceAccInfo>
+
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String
@@ -138,6 +163,17 @@ interface BilibiliApi {
         fun setLoginCookies(sessdata: String, biliJct: String, dedeUserId: String) {
             loginCookies = "SESSDATA=$sessdata; bili_jct=$biliJct; DedeUserID=$dedeUserId"
             this.biliJct = biliJct
+        }
+
+        fun parseSelfMid(): Long? {
+            val patterns = listOf("DedeUserID=", "DedeUserID=")
+            for (pattern in patterns) {
+                try {
+                    loginCookies.split(";").firstOrNull { it.trim().startsWith(pattern) }
+                        ?.substringAfter(pattern)?.trim()?.toLongOrNull()?.let { return it }
+                } catch (_: Exception) {}
+            }
+            return null
         }
 
         private fun fetchWbiKeys(): Pair<String, String>? {
@@ -267,7 +303,7 @@ interface BilibiliApi {
                     val orig = chain.request()
                     val url = orig.url.toString()
                     val isCdn = !url.contains("api.bilibili.com")
-                    val isSpaceApi = !isCdn && url.contains("/x/space/")
+                    val isSpaceApi = !isCdn && url.contains("/x/space/") && !url.contains("acc/info")
                     val spaceOrigin = "https://space.bilibili.com"
                     val apiOrigin = "https://www.bilibili.com"
                     val builder = orig.newBuilder()

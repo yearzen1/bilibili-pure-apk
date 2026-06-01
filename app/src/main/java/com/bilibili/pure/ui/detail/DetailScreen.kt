@@ -106,7 +106,11 @@ fun DetailScreen(
                     isFavorited = uiState.isFavorited,
                     favoriteCount = uiState.favoriteCount,
                     isTogglingFavorite = uiState.isTogglingFavorite,
-                    onToggleFavorite = { viewModel.toggleFavorite(uiState.videoInfo!!.aid) }
+                    onToggleFavorite = { viewModel.toggleFavorite(uiState.videoInfo!!.aid) },
+                    isLoggedIn = uiState.isLoggedIn,
+                    isFollowed = uiState.isFollowed,
+                    isTogglingFollow = uiState.isTogglingFollow,
+                    onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) }
                 )
             }
         }
@@ -129,7 +133,11 @@ private fun DetailContent(
     isFavorited: Boolean = false,
     favoriteCount: Long = 0,
     isTogglingFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {}
+    onToggleFavorite: () -> Unit = {},
+    isLoggedIn: Boolean = false,
+    isFollowed: Boolean = false,
+    isTogglingFollow: Boolean = false,
+    onFollowUploader: (mid: Long) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
 
@@ -203,6 +211,18 @@ private fun DetailContent(
                             text = videoInfo.owner.name,
                             style = MaterialTheme.typography.bodyLarge
                         )
+                    }
+                    if (isLoggedIn) {
+                        TextButton(
+                            onClick = { onFollowUploader(videoInfo.owner.mid) },
+                            enabled = !isTogglingFollow,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = if (isFollowed) "已关注" else "关注",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
                     }
                     Button(onClick = onPlay) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)

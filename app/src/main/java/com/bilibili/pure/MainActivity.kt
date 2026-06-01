@@ -20,6 +20,7 @@ import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.channel.ChannelSearchScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.favorites.FavoritesScreen
+import com.bilibili.pure.ui.following.FollowingListScreen
 import com.bilibili.pure.ui.history.HistoryScreen
 import com.bilibili.pure.ui.login.LoginScreen
 import com.bilibili.pure.ui.navigation.Routes
@@ -96,7 +97,8 @@ fun MainScreen() {
                 ProfileScreen(
                     onLoginClick = { navController.navigate(Routes.LOGIN) },
                     onHistoryClick = { navController.navigate(Routes.HISTORY) },
-                    onFavoritesClick = { navController.navigate(Routes.FAVORITES) }
+                    onFavoritesClick = { navController.navigate(Routes.FAVORITES) },
+                    onFollowingClick = { navController.navigate(Routes.FOLLOWING) }
                 )
             }
 
@@ -150,6 +152,15 @@ fun MainScreen() {
                     onBack = { navController.popBackStack() },
                     onVideoClick = { bvid ->
                         navController.navigate(Routes.detail(bvid))
+                    }
+                )
+            }
+
+            composable(route = Routes.FOLLOWING) {
+                FollowingListScreen(
+                    onBack = { navController.popBackStack() },
+                    onUploaderClick = { mid ->
+                        navController.navigate(Routes.channel(mid))
                     }
                 )
             }

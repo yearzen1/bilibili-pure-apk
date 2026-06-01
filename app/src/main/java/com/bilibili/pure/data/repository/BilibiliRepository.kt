@@ -247,4 +247,96 @@ class BilibiliRepository(
             Pair(statusCode, response.data)
         }.onFailure { Log.e(BilibiliApp.TAG, "pollQRCode failed", it) }
     }
+
+    suspend fun modifyRelation(fid: Long, act: Int): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "modifyRelation: fid=$fid act=$act")
+        return runCatching {
+            val response = api.modifyRelation(fid = fid, act = act, csrf = BilibiliApi.biliJct)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "modifyRelation response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) throw Exception(response.message)
+        }.onFailure { Log.e(BilibiliApp.TAG, "modifyRelation failed", it) }
+    }
+
+    suspend fun getFollowings(vmid: Long, page: Int = 1): Result<Pair<List<FollowingItem>, Int>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFollowings: vmid=$vmid page=$page")
+        return runCatching<Pair<List<FollowingItem>, Int>> {
+            val response = api.getFollowings(vmid = vmid, page = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFollowings response: code=${response.code}")
+            if (response.code == 0) {
+                val data = response.data
+                Pair(data?.list ?: emptyList(), data?.total ?: 0)
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getFollowings failed", it) }
+    }
+
+    suspend fun getRelationStat(vmid: Long): Result<RelationStat> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getRelationStat: vmid=$vmid")
+        return runCatching {
+            val response = api.getRelationStat(vmid = vmid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getRelationStat response: code=${response.code}")
+            if (response.code == 0) {
+                response.data ?: throw Exception("Empty stat")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getRelationStat failed", it) }
+    }
+
+    suspend fun getSpaceAccInfo(mid: Long): Result<SpaceAccInfo> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSpaceAccInfo: mid=$mid")
+        return runCatching {
+            val response = api.getSpaceAccInfo(mid = mid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSpaceAccInfo response: code=${response.code}")
+            if (response.code == 0) {
+                response.data ?: throw Exception("Empty space info")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSpaceAccInfo failed", it) }
+    }
+
+    suspend fun checkRelation(fid: Long): Result<Boolean> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "checkRelation: fid=$fid")
+        return try {
+            val response = api.getRelation(fid)
+            if (response.code != 0) {
+                Result.failure(Exception("getRelation failed: code=${response.code} msg=${response.message}"))
+            } else {
+                val attr = response.data?.attribute ?: 0
+                Result.success(attr == 2 || attr == 6)
+            }
+        } catch (e: Exception) {
+            Log.e(BilibiliApp.TAG, "checkRelation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun isFollowing(selfMid: Long, targetMid: Long): Result<Boolean> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "isFollowing: self=$selfMid target=$targetMid")
+        var page = 1
+        val maxPages = 10
+        val pageSize = 100
+        while (page <= maxPages) {
+            try {
+                val response = api.getFollowings(vmid = selfMid, pageSize = 100, page = page)
+                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "isFollowing page=$page: code=${response.code}")
+                if (response.code != 0) {
+                    Log.w(BilibiliApp.TAG, "isFollowing page $page failed: code=${response.code} msg=${response.message}")
+                    page++
+                    continue
+                }
+                val list = response.data?.list ?: emptyList()
+                if (list.any { it.mid == targetMid }) return Result.success(true)
+                if (list.size < pageSize) break
+                page++
+            } catch (e: Exception) {
+                Log.w(BilibiliApp.TAG, "isFollowing page $page exception", e)
+                page++
+            }
+        }
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "isFollowing: not found after $page pages")
+        return Result.success(false)
+    }
 }

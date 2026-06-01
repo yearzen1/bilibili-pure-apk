@@ -1,14 +1,17 @@
 package com.bilibili.pure.ui.channel
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,7 +22,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.bilibili.pure.data.model.SpaceAccInfo
 import com.bilibili.pure.data.model.UserVideoItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -142,7 +149,12 @@ fun ChannelScreen(
                     hasMore = uiState.hasMore,
                     onLoadMore = { viewModel.loadMore() },
                     onVideoClick = onVideoClick,
-                    modifier = Modifier.padding(padding)
+                    modifier = Modifier.padding(padding),
+                    spaceAccInfo = uiState.spaceAccInfo,
+                    isLoggedIn = uiState.isLoggedIn,
+                    isFollowed = uiState.isFollowed,
+                    isTogglingFollow = uiState.isTogglingFollow,
+                    onToggleFollow = { viewModel.toggleFollow() }
                 )
             }
         }
@@ -156,7 +168,12 @@ internal fun ChannelContent(
     hasMore: Boolean,
     onLoadMore: () -> Unit,
     onVideoClick: (bvid: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    spaceAccInfo: SpaceAccInfo? = null,
+    isLoggedIn: Boolean = false,
+    isFollowed: Boolean = false,
+    isTogglingFollow: Boolean = false,
+    onToggleFollow: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val nearBottom by remember {
@@ -183,6 +200,75 @@ internal fun ChannelContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (spaceAccInfo != null) {
+            item(key = "up_info") {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (spaceAccInfo.face.isNotBlank()) {
+                            AsyncImage(
+                                model = fixPic(spaceAccInfo.face),
+                                contentDescription = spaceAccInfo.name,
+                                modifier = Modifier.size(48.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = spaceAccInfo.name,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = spaceAccInfo.name,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            if (spaceAccInfo.sign.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = spaceAccInfo.sign,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        if (isLoggedIn) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = onToggleFollow,
+                                enabled = !isTogglingFollow,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (isFollowed) "已关注" else "关注",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (videos.isNotEmpty()) {
             item(key = "header") {
                 Text(

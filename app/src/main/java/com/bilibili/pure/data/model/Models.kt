@@ -230,3 +230,38 @@ data class FavResourceCntInfo(
 data class FavouredData(
     val favoured: Boolean = false
 )
+
+data class FollowingItem(
+    val mid: Long,
+    val uname: String,
+    val face: String,
+    val sign: String = "",
+    val attribute: Int = 0
+)
+
+data class FollowingListData(
+    val list: List<FollowingItem>?,
+    val total: Int = 0
+)
+
+data class RelationStat(
+    val mid: Long,
+    val following: Int = 0,
+    val follower: Int = 0
+)
+
+data class RelationData(
+    val mid: Long,
+    val attribute: Int = 0,
+    val mtime: Long = 0,
+    val tag: List<Long>? = null,
+    val special: Int = 0
+)
+
+data class SpaceAccInfo(
+    val mid: Long,
+    val name: String,
+    val face: String,
+    val sign: String = "",
+    val attribute: Int = 0
+)

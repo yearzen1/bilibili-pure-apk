@@ -19,6 +19,8 @@
 | 观看历史 | 分 P 进度显示、30 秒心跳上报、全量缓存标题搜索、回到顶部按钮 |
 | 我的收藏 | 收藏夹列表 → 视频列表两级浏览、分页加载、BackHandler 拦截系统返回手势 |
 | 搜索历史 | 保存最近 10 条搜索记录到本地 SharedPreferences，支持单条删除和清空 |
+| 关注 UP 主 | 视频详情页和 UP 主频道页关注/取关按钮（仅登录显示），`x/relation` 直查关注状态 |
+| 关注列表 | 个人中心「我的关注」入口，分页加载，支持横向滑动排序切换 |
 
 ## 使用的 API
 
@@ -38,6 +40,10 @@
 | 收藏夹内容 | `api.bilibili.com/x/v3/fav/resource/list` | 收藏夹内视频资源分页（需登录） | ✅ |
 | 收藏状态 | `api.bilibili.com/x/v2/fav/video/favoured` | 查询当前用户是否已收藏视频（需登录） | ✅ |
 | 收藏/取消收藏 | `api.bilibili.com/x/v3/fav/resource/deal` | 添加/移出收藏夹（POST，需 csrf） | ✅ |
+| 关注状态 | `api.bilibili.com/x/relation` | 查询当前用户与目标 UP 主的关注关系（attribute: 0/2/6） | ✅ |
+| 关注/取关 | `api.bilibili.com/x/relation/modify` | 关注或取消关注 UP 主（POST，需 csrf） | ✅ |
+| 关注列表 | `api.bilibili.com/x/relation/followings` | 获取用户关注列表（分页，仅登录用户查看全部） | ✅ |
+| UP 主空间 | `api.bilibili.com/x/space/acc/info` | UP 主头像、昵称、签名（反爬严重，关注状态不可靠） | ⚠️ |
 
 ## 技术栈
 
