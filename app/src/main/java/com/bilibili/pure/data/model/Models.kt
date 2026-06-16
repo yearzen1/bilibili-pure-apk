@@ -90,6 +90,7 @@ data class CommentContent(
 )
 
 data class CommentMember(
+    val mid: Long = 0,
     val uname: String,
     val avatar: String
 )

@@ -111,7 +111,8 @@ fun MainScreen() {
                     bvid = bvid,
                     onBack = { navController.popBackStack() },
                     onPlay = { b -> navController.navigate(Routes.player(b)) },
-                    onUploaderClick = { mid -> navController.navigate(Routes.channel(mid)) }
+                    onUploaderClick = { mid -> navController.navigate(Routes.channel(mid)) },
+                    onUserClick = { mid -> navController.navigate(Routes.channel(mid)) }
                 )
             }
 

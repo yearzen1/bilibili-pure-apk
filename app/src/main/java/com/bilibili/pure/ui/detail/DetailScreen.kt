@@ -53,12 +53,15 @@ fun DetailScreen(
     onBack: () -> Unit,
     onPlay: (bvid: String) -> Unit,
     onUploaderClick: (mid: Long) -> Unit = {},
+    onUserClick: (mid: Long) -> Unit = {},
     viewModel: DetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.load(bvid)
+        if (uiState.videoInfo == null) {
+            viewModel.load(bvid)
+        }
     }
 
     Scaffold(
@@ -73,56 +76,42 @@ fun DetailScreen(
             )
         }
     ) { padding ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.error != null -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("加载失败：${uiState.error}")
-                }
-            }
-            uiState.videoInfo != null -> {
-                DetailContent(
-                    videoInfo = uiState.videoInfo!!,
-                    comments = uiState.comments,
-                    onPlay = { onPlay(bvid) },
-                    onUploaderClick = onUploaderClick,
-                    modifier = Modifier.padding(padding),
-                    replyThreads = uiState.replyThreads,
-                    expandedReplies = uiState.expandedReplies,
-                    onToggleReplies = { rpid -> viewModel.toggleReplies(uiState.videoInfo!!.aid, rpid) },
-                    loadingMore = uiState.loadingMore,
-                    hasMoreComments = uiState.hasMoreComments,
-                    onLoadMoreComments = { viewModel.loadMoreComments(uiState.videoInfo!!.aid) },
-                    isFavorited = uiState.isFavorited,
-                    favoriteCount = uiState.favoriteCount,
-                    isTogglingFavorite = uiState.isTogglingFavorite,
-                    onToggleFavorite = { viewModel.toggleFavorite(uiState.videoInfo!!.aid) },
-                    isLoggedIn = uiState.isLoggedIn,
-                    isFollowed = uiState.isFollowed,
-                    isTogglingFollow = uiState.isTogglingFollow,
-                    onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) }
-                )
-            }
-        }
+        DetailContent(
+            videoInfo = uiState.videoInfo,
+            isLoading = uiState.isLoading,
+            error = uiState.error,
+            comments = uiState.comments,
+            onPlay = { onPlay(bvid) },
+            onUploaderClick = onUploaderClick,
+            onUserClick = onUserClick,
+            modifier = Modifier.padding(padding),
+            replyThreads = uiState.replyThreads,
+            expandedReplies = uiState.expandedReplies,
+            onToggleReplies = { rpid -> uiState.videoInfo?.let { viewModel.toggleReplies(it.aid, rpid) } },
+            loadingMore = uiState.loadingMore,
+            hasMoreComments = uiState.hasMoreComments,
+            onLoadMoreComments = { uiState.videoInfo?.let { viewModel.loadMoreComments(it.aid) } },
+            isFavorited = uiState.isFavorited,
+            favoriteCount = uiState.favoriteCount,
+            isTogglingFavorite = uiState.isTogglingFavorite,
+            onToggleFavorite = { uiState.videoInfo?.let { viewModel.toggleFavorite(it.aid) } },
+            isLoggedIn = uiState.isLoggedIn,
+            isFollowed = uiState.isFollowed,
+            isTogglingFollow = uiState.isTogglingFollow,
+            onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) }
+        )
     }
 }
 
 @Composable
 private fun DetailContent(
-    videoInfo: VideoInfo,
+    videoInfo: VideoInfo?,
+    isLoading: Boolean = false,
+    error: String? = null,
     comments: List<com.bilibili.pure.data.model.CommentItem>?,
     onPlay: () -> Unit,
     onUploaderClick: (mid: Long) -> Unit = {},
+    onUserClick: (mid: Long) -> Unit = {},
     modifier: Modifier = Modifier,
     replyThreads: Map<Long, ReplyThread> = emptyMap(),
     expandedReplies: Set<Long> = emptySet(),
@@ -174,194 +163,218 @@ private fun DetailContent(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                AsyncImage(
-                    model = fixPic(videoInfo.pic),
-                    contentDescription = videoInfo.title,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentScale = ContentScale.Crop
-                )
-            }
-
-            item {
-                Text(
-                    text = videoInfo.title,
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(
+            if (videoInfo != null) {
+                item {
+                    AsyncImage(
+                        model = fixPic(videoInfo.pic),
+                        contentDescription = videoInfo.title,
                         modifier = Modifier
-                            .weight(1f)
-                            .clickable { onUploaderClick(videoInfo.owner.mid) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = fixPic(videoInfo.owner.face),
-                            contentDescription = videoInfo.owner.name,
-                            modifier = Modifier.size(40.dp),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = videoInfo.owner.name,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                    if (isLoggedIn) {
-                        TextButton(
-                            onClick = { onFollowUploader(videoInfo.owner.mid) },
-                            enabled = !isTogglingFollow,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                item {
+                    Text(
+                        text = videoInfo.title,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                }
+
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onUploaderClick(videoInfo.owner.mid) },
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            AsyncImage(
+                                model = fixPic(videoInfo.owner.face),
+                                contentDescription = videoInfo.owner.name,
+                                modifier = Modifier.size(40.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isFollowed) "已关注" else "关注",
-                                style = MaterialTheme.typography.labelMedium
+                                text = videoInfo.owner.name,
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
-                    }
-                    Button(onClick = onPlay) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("播放")
+                        if (isLoggedIn) {
+                            TextButton(
+                                onClick = { onFollowUploader(videoInfo.owner.mid) },
+                                enabled = !isTogglingFollow,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (isFollowed) "已关注" else "关注",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                        Button(onClick = onPlay) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("播放")
+                        }
                     }
                 }
-            }
 
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StatChip("播放", formatCount(videoInfo.stat.view))
-                    StatChip("点赞", formatCount(videoInfo.stat.like))
-                    StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
-                    StatChip("评论", formatCount(videoInfo.stat.reply))
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        enabled = !isTogglingFavorite
-                    ) {
-                        Icon(
-                            imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = if (isFavorited) "取消收藏" else "收藏",
-                            tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StatChip("播放", formatCount(videoInfo.stat.view))
+                        StatChip("点赞", formatCount(videoInfo.stat.like))
+                        StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
+                        StatChip("评论", formatCount(videoInfo.stat.reply))
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(
+                            onClick = onToggleFavorite,
+                            enabled = !isTogglingFavorite
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isFavorited) "取消收藏" else "收藏",
+                                tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = formatCount(favoriteCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+
+                item {
+                    val dateStr = if (videoInfo.pubdate > 0L) {
+                        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
+                    } else ""
                     Text(
-                        text = formatCount(favoriteCount),
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "发布日期：$dateStr",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            item {
-                val dateStr = if (videoInfo.pubdate > 0L) {
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
-                } else ""
-                Text(
-                    text = "发布日期：$dateStr",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                item {
+                    var expanded by remember { mutableStateOf(false) }
+                    var isTruncated by remember { mutableStateOf(false) }
 
-            item {
-                var expanded by remember { mutableStateOf(false) }
-                var isTruncated by remember { mutableStateOf(false) }
-
-                Column {
-                    Text(
-                        text = videoInfo.desc,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (expanded) Int.MAX_VALUE else 3,
-                        overflow = TextOverflow.Ellipsis,
-                        onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
-                    )
-                    if (isTruncated) {
-                        TextButton(onClick = { expanded = !expanded }) {
-                            Text(if (expanded) "收起" else "展开全部")
-                        }
-                    }
-                }
-            }
-
-            item(key = "comments_header") {
-                Text(
-                    text = "评论 (${videoInfo.stat.reply})",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            if (comments != null) {
-                comments.forEach { comment ->
-                    val rpid = comment.rpid
-                    val thread = replyThreads[rpid]
-                    val isExpanded = rpid in expandedReplies
-
-                    item(key = rpid) {
-                        CommentCard(
-                            comment = comment,
-                            thread = thread,
-                            isExpanded = isExpanded,
-                            onToggle = { onToggleReplies(rpid) }
+                    Column {
+                        Text(
+                            text = videoInfo.desc,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (expanded) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
                         )
-                    }
-
-                    if (isExpanded && thread != null) {
-                        thread.items.forEach { reply ->
-                            item(key = "r_$rpid:${reply.rpid}") {
-                                ReplyRow(reply = reply)
-                            }
-                        }
-                        item(key = "collapse_$rpid") {
-                            TextButton(
-                                onClick = { onToggleReplies(rpid) },
-                                modifier = Modifier.padding(start = 32.dp)
-                            ) {
-                                Text("收起回复")
+                        if (isTruncated) {
+                            TextButton(onClick = { expanded = !expanded }) {
+                                Text(if (expanded) "收起" else "展开全部")
                             }
                         }
                     }
                 }
-            }
 
-            item(key = "bottom") {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    when {
-                        loadingMore -> CircularProgressIndicator(Modifier.size(24.dp))
-                        hasMoreComments -> TextButton(onClick = onLoadMoreComments) {
-                            Text("加载更多评论", style = MaterialTheme.typography.bodySmall)
+                item(key = "comments_header") {
+                    Text(
+                        text = "评论 (${videoInfo.stat.reply})",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                if (comments != null) {
+                    comments.forEach { comment ->
+                        val rpid = comment.rpid
+                        val thread = replyThreads[rpid]
+                        val isExpanded = rpid in expandedReplies
+
+                        item(key = rpid) {
+                            CommentCard(
+                                comment = comment,
+                                thread = thread,
+                                isExpanded = isExpanded,
+                                onToggle = { onToggleReplies(rpid) },
+                                onUserClick = onUserClick
+                            )
+                        }
+
+                        if (isExpanded && thread != null) {
+                            thread.items.forEach { reply ->
+                                item(key = "r_$rpid:${reply.rpid}") {
+                                    ReplyRow(reply = reply, onUserClick = onUserClick)
+                                }
+                            }
+                            item(key = "collapse_$rpid") {
+                                TextButton(
+                                    onClick = { onToggleReplies(rpid) },
+                                    modifier = Modifier.padding(start = 32.dp)
+                                ) {
+                                    Text("收起回复")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item(key = "bottom") {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        when {
+                            loadingMore -> CircularProgressIndicator(Modifier.size(24.dp))
+                            hasMoreComments -> TextButton(onClick = onLoadMoreComments) {
+                                Text("加载更多评论", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
             }
         }
 
-        if (showScrollToTop) {
-            FloatingActionButton(
-                onClick = { scope.launch { listState.scrollToItem(0) } },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
+        if (videoInfo == null) {
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("加载失败：$error")
+                    }
+                }
             }
-        }
+        } else {
+            if (showScrollToTop) {
+                FloatingActionButton(
+                    onClick = { scope.launch { listState.scrollToItem(0) } },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
+                }
+            }
 
-        if (showScrollToComments) {
-            FloatingActionButton(
-                onClick = { scope.launch { listState.scrollToItem(6) } },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "跳至评论区")
+            if (showScrollToComments) {
+                FloatingActionButton(
+                    onClick = { scope.launch { listState.scrollToItem(6) } },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "跳至评论区")
+                }
             }
         }
     }
@@ -372,7 +385,8 @@ private fun CommentCard(
     comment: com.bilibili.pure.data.model.CommentItem,
     thread: ReplyThread?,
     isExpanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onUserClick: (mid: Long) -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -396,7 +410,8 @@ private fun CommentCard(
                         Text(
                             text = comment.member.uname,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onUserClick(comment.member.mid) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -430,7 +445,7 @@ private fun CommentCard(
 }
 
 @Composable
-private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem) {
+private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem, onUserClick: (mid: Long) -> Unit = {}) {
     Row(modifier = Modifier.padding(start = 32.dp)) {
         AsyncImage(
             model = fixPic(reply.member.avatar),
@@ -444,7 +459,8 @@ private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem) {
                 Text(
                     text = reply.member.uname,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { onUserClick(reply.member.mid) }
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
