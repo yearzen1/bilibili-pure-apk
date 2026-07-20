@@ -1,10 +1,17 @@
 package com.bilibili.pure.ui.detail
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
@@ -16,9 +23,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.ui.search.formatCount
@@ -425,6 +436,9 @@ private fun CommentCard(
                         text = comment.content.message,
                         style = MaterialTheme.typography.bodySmall
                     )
+                    comment.content.pictures?.let { pictures ->
+                        CommentPicturesRow(pictures = pictures)
+                    }
                     if (comment.rcount > 0) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -472,6 +486,98 @@ private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem, onUserClic
             Text(
                 text = reply.content.message,
                 style = MaterialTheme.typography.bodySmall
+            )
+            reply.content.pictures?.let { pictures ->
+                CommentPicturesRow(pictures = pictures)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentPicturesRow(pictures: List<com.bilibili.pure.data.model.CommentPicture>) {
+    var showViewer by remember { mutableStateOf(false) }
+    var initialIndex by remember { mutableStateOf(0) }
+
+    Row(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        pictures.forEachIndexed { index, picture ->
+            val ratio = if (picture.imgWidth > 0 && picture.imgHeight > 0)
+                picture.imgWidth.toFloat() / picture.imgHeight.toFloat() else 1f
+            AsyncImage(
+                model = fixPic(picture.imgSrc),
+                contentDescription = null,
+                modifier = Modifier
+                    .height(80.dp)
+                    .aspectRatio(ratio, matchHeightConstraintsFirst = true)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable {
+                        initialIndex = index
+                        showViewer = true
+                    },
+                contentScale = ContentScale.Crop
+            )
+        }
+    }
+
+    if (showViewer) {
+        CommentImageViewer(
+            pictures = pictures,
+            initialIndex = initialIndex,
+            onClose = { showViewer = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CommentImageViewer(
+    pictures: List<com.bilibili.pure.data.model.CommentPicture>,
+    initialIndex: Int,
+    onClose: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val pagerState = rememberPagerState(
+            initialPage = initialIndex,
+            pageCount = { pictures.size }
+        )
+
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f))) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = fixPic(pictures[page].imgSrc),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+
+            Text(
+                text = "${pagerState.currentPage + 1} / ${pictures.size}",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp)
             )
         }
     }

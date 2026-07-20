@@ -86,7 +86,15 @@ data class CommentItem(
 )
 
 data class CommentContent(
-    val message: String
+    val message: String,
+    val pictures: List<CommentPicture>? = null
+)
+
+data class CommentPicture(
+    @SerializedName("img_src") val imgSrc: String,
+    @SerializedName("img_width") val imgWidth: Int,
+    @SerializedName("img_height") val imgHeight: Int,
+    @SerializedName("img_size") val imgSize: Double
 )
 
 data class CommentMember(
