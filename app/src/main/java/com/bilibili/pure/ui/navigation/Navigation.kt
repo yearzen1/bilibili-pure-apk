@@ -23,6 +23,9 @@ object Routes {
     const val CHANNEL_SEARCH = "channelSearch/{mid}?keyword={keyword}"
     const val FAVORITES = "favorites"
     const val FOLLOWING = "following"
+    const val DOWNLOADS = "downloads"
+    const val SETTINGS = "settings"
+    const val LOCAL_PLAYER = "local/{filePath}"
 
     fun detail(bvid: String): String {
         if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")

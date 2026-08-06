@@ -3,7 +3,14 @@ package com.bilibili.pure.ui.profile
 import android.app.Application
 import android.webkit.CookieManager
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.model.NavInfo
+import com.bilibili.pure.data.repository.BilibiliRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class ProfileUiState(
     val isLoggedIn: Boolean = false,
@@ -13,6 +20,20 @@ data class ProfileUiState(
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("bili_prefs", 0)
+    private val repository = BilibiliRepository()
+
+    private val _navInfo = MutableStateFlow<NavInfo?>(null)
+    val navInfo: StateFlow<NavInfo?> = _navInfo.asStateFlow()
+
+    init {
+        val sessdata = prefs.getString("sessdata", null)
+        if (!sessdata.isNullOrEmpty()) {
+            viewModelScope.launch {
+                repository.getNavInfo()
+                    .onSuccess { _navInfo.value = it.copy(face = it.face.replace("http://", "https://")) }
+            }
+        }
+    }
 
     fun getState(): ProfileUiState {
         val sessdata = prefs.getString("sessdata", null)
@@ -33,5 +54,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             .apply()
         BilibiliApi.loginCookies = ""
         BilibiliApi.biliJct = ""
+        _navInfo.value = null
     }
 }

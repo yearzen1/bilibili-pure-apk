@@ -13,8 +13,12 @@
 | 速度控制 | 弹出菜单（0.5x–2.0x）、长按快速切换 |
 | 评论系统 | 分页加载、展开回复、收起回复 |
 | UP主频道 | 视频详情页点击 UP主名进入频道页，查看该 UP主的所有视频（分页） |
-| 登录 | 二维码登录 + 密码登录（WebView 方式） |
-| 个人中心 | 登录状态展示、退出登录 |
+| 登录 | 三标签页登录：扫码 / 短信 / 密码（原生 UI），极验 Geetest 验证码，`onJsPrompt` JS↔Native 桥接 |
+| 画质选择 | DASH（fnval=16）多画质流，ExoPlayer `MergingMediaSource` 合并视频音频，播放器内 PopupMenu 切换 |
+| 视频下载 | `DownloadManager` 下载渐进式 MP4（fnval=1），前台服务通知、暂停/继续/删除、应用私有目录免权限 |
+| 我的下载 | 下载列表（封面/标题/画质/大小/进度），支持本地文件播放 |
+| 个人中心 | 登录状态展示（头像/昵称/UID）、我的下载/设置入口、退出登录 |
+| 设置 | 仅 Wi-Fi 开关：播放与下载（非 Wi-Fi 时 Toast 提示并阻止） |
 | 图片加载 | Coil + 自定义 OkHttp，支持 CDN 鉴权 |
 | 观看历史 | 分 P 进度显示、30 秒心跳上报、全量缓存标题搜索、回到顶部按钮 |
 | 我的收藏 | 收藏夹列表 → 视频列表两级浏览、分页加载、BackHandler 拦截系统返回手势 |
@@ -30,10 +34,15 @@
 | 视频详情 | `api.bilibili.com/x/web-interface/view` | 视频信息、封面、分 P | ✅ |
 | UP主视频列表 | `api.bilibili.com/x/space/wbi/arc/search` | UP主视频分页列表（WBI 签名） | ✅ |
 | 播放地址 | `api.bilibili.com/x/player/playurl` | MP4 直链（fnval=1） | ✅ |
+| 播放地址(DASH) | `api.bilibili.com/x/player/playurl` | 多画质视频+音频流（fnval=16） | ✅ |
 | 评论 | `api.bilibili.com/x/v2/reply/main` | 视频评论（游标分页） | ✅ |
 | 回复 | `api.bilibili.com/x/v2/reply/reply` | 评论回复（最多 20 条） | ✅ |
-| 二维码生成 | `api.bilibili.com/x/passport-login/oauth2/qrcode/generate` | 登录二维码 | ✅ |
-| 二维码轮询 | `api.bilibili.com/x/passport-login/oauth2/qrcode/poll` | 扫码状态查询 | ✅ |
+| 二维码生成 | `passport.bilibili.com/x/passport-login/web/qrcode/generate` | 登录二维码 | ✅ |
+| 二维码轮询 | `passport.bilibili.com/x/passport-login/web/qrcode/poll` | 扫码状态查询 | ✅ |
+| 极验验证 | `passport.bilibili.com/x/passport-login/captcha` | 获取 Geetest token/challenge/gt | ✅ |
+| 发送验证码 | `passport.bilibili.com/x/passport-login/web/sms/send` | 短信验证码发送 | ✅ |
+| 短信登录 | `passport.bilibili.com/x/passport-login/web/login/sms` | 验证码登录 | ✅ |
+| 密码登录 | `passport.bilibili.com/x/passport-login/web/login` | 用户名+RSA加密密码登录 | ✅ |
 | 进度上报 | `api.bilibili.com/x/v2/history/report` | 心跳上报播放进度（需 csrf） | ✅ |
 | 观看历史 | `api.bilibili.com/x/v2/history` | 视频历史记录（返回 `HistoryPage` 对象含 `page`/`part`/`duration`） | ✅ |
 | 收藏夹列表 | `api.bilibili.com/x/v3/fav/folder/created/list-all` | 获取用户收藏夹列表（需登录） | ✅ |
@@ -43,16 +52,19 @@
 | 关注状态 | `api.bilibili.com/x/relation` | 查询当前用户与目标 UP 主的关注关系（attribute: 0/2/6） | ✅ |
 | 关注/取关 | `api.bilibili.com/x/relation/modify` | 关注或取消关注 UP 主（POST，需 csrf） | ✅ |
 | 关注列表 | `api.bilibili.com/x/relation/followings` | 获取用户关注列表（分页，仅登录用户查看全部） | ✅ |
-| UP 主空间 | `api.bilibili.com/x/space/acc/info` | UP 主头像、昵称、签名（反爬严重，关注状态不可靠） | ⚠️ |
+| 当前用户信息 | `api.bilibili.com/x/web-interface/nav` | 登录用户昵称/头像/UID，含 WBI 密钥 | ✅ |
+| UP 主信息 | `api.bilibili.com/x/web-interface/card` | UP 主头像、昵称、签名、关注状态（弱反爬） | ✅ |
+| UP 主空间 | `api.bilibili.com/x/space/acc/info` | 备用端点（反爬严重，已被 `card` 替代） | ⚠️ |
 
 ## 技术栈
 
-- **播放器**: Media3 ExoPlayer 1.4.1 + `media3-datasource-okhttp`
+- **播放器**: Media3 ExoPlayer 1.4.1 + `media3-exoplayer-dash` + `media3-datasource-okhttp`
 - **网络**: Retrofit2 + OkHttp 4.12.0（自定义拦截器添加 Referer/UA/Cookie/浏览器头）
 - **图片加载**: Coil 2.6.0（复用同一 OkHttp 客户端处理 CDN 鉴权）
 - **UI**: Jetpack Compose + Material3 + Compose BOM 2024.04.01
 - **手势**: `Modifier.pointerInput` + `awaitPointerEventScope`（搜索滑动切排序用 `PointerEventPass.Initial`）
 - **二维码**: ZXing 3.5.3
+- **下载**: 前台服务 + 通知 + OkHttp 流式写入 + SharedPreferences 元数据
 
 ## 关键实现细节
 
@@ -79,9 +91,32 @@ Bilibili Web 端部分接口（如 `x/space/wbi/arc/search`）需要 WBI 签名�
 5. 拦截器自动检测 `/wbi/` 路径，注入签名参数
 
 ### 登录
-- **二维码登录**: Passport API 生成 → 轮询扫码状态 → 提取 `SESSDATA`/`bili_jct`/`DedeUserID` → SharedPreferences 持久化
-- **密码登录**: WebView 加载 `passport.bilibili.com/login` → `onPageFinished` 拦截 Cookie → CookieManager 管理会话
-- 应用启动时从 SharedPreferences 恢复登录状态
+三标签页（扫码 / 短信 / 密码），登录成功提取 `SESSDATA`/`bili_jct`/`DedeUserID` 存入 SharedPreferences，启动时恢复。
+
+- **扫码登录**: Passport API 生成二维码 → 轮询扫码确认 → 从回调 URL 提取会话 Cookie（天然绕过网页风控，推荐）
+- **短信/密码登录**: 原生 Compose UI + `x/passport-login/captcha` 获取 Geetest `gt`/`challenge`，WebView 内嵌极验 → JS 结果经 `onJsPrompt` 桥接回传
+- **极验集成要点**:
+  - `gt` 与 `challenge` 必须使用接口动态返回值（写死会导致极验初始化静默失败）
+  - 极验 `getValidate()` 返回字段带前缀：`geetest_challenge`/`geetest_validate`/`geetest_seccode`
+  - 传给登录/发短信接口的 `challenge` 用极验返回的 `geetest_challenge`，而非最初获取的 challenge
+  - JS→Native 用 `WebChromeClient.onJsPrompt` 桥接（`prompt(type+':'+JSON)`），比 `addJavascriptInterface`/轮询更可靠
+- 登录请求需带浏览器头 + buvid3 Cookie，故拦截器将 `passport.bilibili.com` 视为 API 域（而非 CDN）
+- **风险控制**: B 站对新 IP/设备触发环境风控，密码/短信网页登录可能被拦（返回 `data.status=2` +「本次登录环境存在风险」且不下发会话 Cookie）。日志/Toast 会展示服务器 `data.message` 提示真实原因。
+
+### 画质选择（DASH）
+播放用 `fnval=16`（DASH）换取全部清晰度流：
+- `getPlayUrlDash()` 返回完整 `PlayUrlInfo`，含 `accept_quality`/`accept_description` 及 `dash.video`/`dash.audio` 流
+- ExoPlayer 以 `ProgressiveMediaSource` + `MergingMediaSource` 合并视频/音频轨
+- 播放器控制栏注入画质 PopupMenu（同倍速按钮方案），切换后重新构建 `MediaItem` 并 seek 回原进度
+- 下载则用 `fnval=1`（渐进式 MP4），单 URL 便于直接落盘
+
+### 视频下载
+`DownloadManager` 基于 OkHttp 流式下载渐进式 MP4：
+- 存储到 `context.getExternalFilesDir("downloads")`（应用私有，API 29+ 免权限，卸载即清）
+- SharedPreferences 持久化元数据（封面/标题/画质/大小）
+- `DownloadService` 前台服务 + 进度通知，支持暂停/继续/删除
+- 本地文件以 `file://` URI 交给播放器播放
+- 下载受「仅 Wi-Fi」设置约束
 
 ### 观看历史 / 心跳上报
 通过 `POST x/v2/history/report` 定时上报播放进度，使视频出现在 B 站观看历史中：
@@ -134,4 +169,5 @@ android-sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.
 
 - `PlayerView.setUseTextureView(true)` 在 Media3 1.4.1 中不可用（需升级），全屏退出时 SurfaceView 偶发闪黑帧
 - 评论 API 仍返回 -403（部分端点还需 WBI 签名 + SESSDATA 登录才能访问）
+- 密码/短信网页登录受 B 站环境风控影响，新 IP 设备可能被拦截（建议使用扫码登录）
 - WAF 412 在 OkHttp 特定 TLS 握手模式下仍可能偶发触发

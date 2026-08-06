@@ -19,6 +19,7 @@ import androidx.navigation.navArgument
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.channel.ChannelSearchScreen
 import com.bilibili.pure.ui.detail.DetailScreen
+import com.bilibili.pure.ui.downloads.DownloadsScreen
 import com.bilibili.pure.ui.favorites.FavoritesScreen
 import com.bilibili.pure.ui.following.FollowingListScreen
 import com.bilibili.pure.ui.history.HistoryScreen
@@ -29,6 +30,7 @@ import com.bilibili.pure.ui.navigation.bottomNavItems
 import com.bilibili.pure.ui.player.PlayerScreen
 import com.bilibili.pure.ui.profile.ProfileScreen
 import com.bilibili.pure.ui.search.SearchScreen
+import com.bilibili.pure.ui.settings.SettingsScreen
 import com.bilibili.pure.ui.theme.BilibiliPureTheme
 
 class MainActivity : ComponentActivity() {
@@ -98,7 +100,9 @@ fun MainScreen() {
                     onLoginClick = { navController.navigate(Routes.LOGIN) },
                     onHistoryClick = { navController.navigate(Routes.HISTORY) },
                     onFavoritesClick = { navController.navigate(Routes.FAVORITES) },
-                    onFollowingClick = { navController.navigate(Routes.FOLLOWING) }
+                    onFollowingClick = { navController.navigate(Routes.FOLLOWING) },
+                    onDownloadsClick = { navController.navigate(Routes.DOWNLOADS) },
+                    onSettingsClick = { navController.navigate(Routes.SETTINGS) }
                 )
             }
 
@@ -163,6 +167,35 @@ fun MainScreen() {
                     onUploaderClick = { mid ->
                         navController.navigate(Routes.channel(mid))
                     }
+                )
+            }
+
+            composable(route = Routes.DOWNLOADS) {
+                DownloadsScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlay = { filePath ->
+                        navController.navigate("local/${java.net.URLEncoder.encode(filePath, "UTF-8")}")
+                    }
+                )
+            }
+
+            composable(route = Routes.SETTINGS) {
+                SettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.LOCAL_PLAYER,
+                arguments = listOf(navArgument("filePath") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val filePath = backStackEntry.arguments?.getString("filePath")?.let {
+                    java.net.URLDecoder.decode(it, "UTF-8")
+                } ?: return@composable
+                PlayerScreen(
+                    bvid = "",
+                    onBack = { navController.popBackStack() },
+                    localFilePath = filePath
                 )
             }
 

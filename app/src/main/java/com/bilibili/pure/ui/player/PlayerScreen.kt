@@ -18,15 +18,12 @@ import android.widget.TextView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrightnessHigh
@@ -40,12 +37,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -54,6 +54,7 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.R
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.model.QualityOption
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,7 +62,8 @@ import kotlinx.coroutines.delay
 fun PlayerScreen(
     bvid: String,
     onBack: () -> Unit,
-    vm: PlayerViewModel = viewModel()
+    vm: PlayerViewModel = viewModel(),
+    localFilePath: String? = null
 ) {
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -69,13 +71,21 @@ fun PlayerScreen(
     var playing by remember { mutableStateOf(false) }
     var initialSeekDone by remember { mutableStateOf(false) }
 
-    LaunchedEffect(bvid) {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
-        vm.load(bvid)
+    LaunchedEffect(bvid, localFilePath) {
+        if (!localFilePath.isNullOrBlank()) {
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering local=$localFilePath")
+            vm.loadLocal(localFilePath)
+        } else if (bvid.isNotBlank()) {
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
+            vm.load(bvid)
+        }
     }
 
-    val dataSourceFactory = remember {
+    val networkFactory = remember {
         OkHttpDataSource.Factory(BilibiliApi.httpClient)
+    }
+    val dataSourceFactory = remember {
+        DefaultDataSource.Factory(context, networkFactory)
     }
 
     val player = remember {
@@ -154,16 +164,48 @@ fun PlayerScreen(
 
     LaunchedEffect(uiState.videoUrl) {
         uiState.videoUrl?.let { url ->
-            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: preparing media url=${url.take(80)}...")
-            val mediaItem = MediaItem.fromUri(url)
-            val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(mediaItem)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: preparing media url=${url.take(80)}... isDash=${uiState.isDash}")
+
+            val currentPosition = if (!initialSeekDone && uiState.historyProgress > 0L && uiState.historyCid == uiState.currentPage?.cid) {
+                uiState.historyProgress * 1000L
+            } else {
+                player.currentPosition
+            }
+
+            val mediaSource: MediaSource = if (uiState.isDash) {
+                val dashVideo = uiState.dashVideo
+                val dashAudio = uiState.dashAudio
+                if (dashVideo != null) {
+                    val videoMediaItem = MediaItem.fromUri(dashVideo.getUrl())
+                    val audioMediaItem = dashAudio?.let { MediaItem.fromUri(it.getUrl()) }
+
+                    val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(videoMediaItem)
+                    val audioSource = audioMediaItem?.let {
+                        ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(it)
+                    }
+
+                    if (audioSource != null) {
+                        androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
+                    } else {
+                        videoSource
+                    }
+                } else {
+                    ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(MediaItem.fromUri(url))
+                }
+            } else {
+                ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(url))
+            }
+
             player.setMediaSource(mediaSource)
             player.prepare()
 
-            if (!initialSeekDone && uiState.historyProgress > 0L && uiState.historyCid == uiState.currentPage?.cid) {
-                val seekMs = uiState.historyProgress * 1000L
-                Log.d(BilibiliApp.TAG, "PlayerScreen: will seek to ${seekMs}ms on ready (history progress)")
+            if (currentPosition > 0) {
+                val seekMs = currentPosition
+                Log.d(BilibiliApp.TAG, "PlayerScreen: will seek to ${seekMs}ms on ready")
                 val listener = object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_READY) {
@@ -231,7 +273,9 @@ fun PlayerScreen(
                 player = player,
                 speedCtl = speedCtl,
                 onFullscreenToggle = { toggleFullscreen() },
-                isFullscreen = true
+                onQualitySelected = { vm.selectQuality(it) },
+                isFullscreen = true,
+                onBack = onBack
             )
         }
     } else {
@@ -272,7 +316,9 @@ fun PlayerScreen(
                         player = player,
                         speedCtl = speedCtl,
                         onFullscreenToggle = { toggleFullscreen() },
-                        isFullscreen = false
+                        onQualitySelected = { vm.selectQuality(it) },
+                        isFullscreen = false,
+                        onBack = onBack
                     )
                 }
 
@@ -319,8 +365,11 @@ private fun PlayerContent(
     player: Player,
     speedCtl: SpeedController,
     onFullscreenToggle: () -> Unit,
-    isFullscreen: Boolean
+    onQualitySelected: (QualityOption) -> Unit,
+    isFullscreen: Boolean,
+    onBack: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var showSpeedToast by remember { mutableStateOf(false) }
     var showBrightnessOverlay by remember { mutableStateOf(false) }
     var showVolumeOverlay by remember { mutableStateOf(false) }
@@ -349,11 +398,9 @@ private fun PlayerContent(
                 CircularProgressIndicator()
             }
             uiState.error != null -> {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("播放失败", style = MaterialTheme.typography.headlineSmall)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(uiState.error!!, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
+                LaunchedEffect(uiState.error) {
+                    android.widget.Toast.makeText(context, uiState.error!!, android.widget.Toast.LENGTH_SHORT).show()
+                    onBack()
                 }
             }
             uiState.videoUrl != null -> {
@@ -374,46 +421,90 @@ private fun PlayerContent(
                                 onFullscreenToggle()
                             }
 
-                            // 在控制器栏添加倍速按钮
                             val settingsId = ctx.resources.getIdentifier("exo_settings", "id", ctx.packageName)
                             if (settingsId != 0) {
                                 val settingsView = view.findViewById<View>(settingsId)
                                 val controlsRow = settingsView?.parent as? ViewGroup
-                                if (controlsRow != null && controlsRow.findViewWithTag<View>("speed_button") == null) {
-                                    val density = ctx.resources.displayMetrics.density
-                                    val btnSize = (48 * density).toInt()
-                                    val btnMargin = (2 * density).toInt()
-                                    val speedBtn = TextView(ctx).apply {
-                                        tag = "speed_button"
-                                        text = "1.0x"
-                                        setTextColor(android.graphics.Color.WHITE)
-                                        textSize = 13f
-                                        typeface = android.graphics.Typeface.DEFAULT_BOLD
-                                        gravity = android.view.Gravity.CENTER
-                                        layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).also {
-                                            it.leftMargin = btnMargin
-                                            it.rightMargin = btnMargin
-                                        }
-                                        setOnClickListener { anchor ->
-                                            val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
-                                            val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
-                                            val speeds = listOf(0.5f, 1.0f, 2.0f, 3.0f)
-                                            speeds.forEachIndexed { i, speed ->
-                                                popup.menu.add(0, i, 0, "%.1fx".format(speed)).apply {
-                                                    if (speed == speedCtl.baseSpeed) isChecked = true
+                                if (controlsRow != null) {
+                                    if (controlsRow.findViewWithTag<View>("speed_button") == null) {
+                                        val density = ctx.resources.displayMetrics.density
+                                        val btnSize = (48 * density).toInt()
+                                        val btnMargin = (2 * density).toInt()
+                                        val speedBtn = TextView(ctx).apply {
+                                            tag = "speed_button"
+                                            text = "1.0x"
+                                            setTextColor(android.graphics.Color.WHITE)
+                                            textSize = 13f
+                                            typeface = android.graphics.Typeface.DEFAULT_BOLD
+                                            gravity = android.view.Gravity.CENTER
+                                            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).also {
+                                                it.leftMargin = btnMargin
+                                                it.rightMargin = btnMargin
+                                            }
+                                            setOnClickListener { anchor ->
+                                                val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
+                                                val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
+                                                val speeds = listOf(0.5f, 1.0f, 2.0f, 3.0f)
+                                                speeds.forEachIndexed { i, speed ->
+                                                    popup.menu.add(0, i, 0, "%.1fx".format(speed)).apply {
+                                                        if (speed == speedCtl.baseSpeed) isChecked = true
+                                                     }
                                                  }
-                                             }
-                                             popup.menu.setGroupCheckable(0, true, true)
-                                             popup.setOnMenuItemClickListener { item ->
-                                                 val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
-                                                 speedCtl.setBase(speed)
-                                                 showSpeedToast = true
-                                                 true
-                                             }
-                                            popup.show()
+                                                 popup.menu.setGroupCheckable(0, true, true)
+                                                 popup.setOnMenuItemClickListener { item ->
+                                                     val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
+                                                     speedCtl.setBase(speed)
+                                                     showSpeedToast = true
+                                                     true
+                                                 }
+                                                popup.show()
+                                            }
                                         }
+                                        controlsRow.addView(speedBtn, 0)
                                     }
-                                    controlsRow.addView(speedBtn, 0)
+
+                                    if (uiState.availableQualities.size > 1 && controlsRow.findViewWithTag<View>("quality_button") == null) {
+                                        val density = ctx.resources.displayMetrics.density
+                                        val btnSize = (48 * density).toInt()
+                                        val btnMargin = (2 * density).toInt()
+                                        val qualityBtn = TextView(ctx).apply {
+                                            tag = "quality_button"
+                                            text = uiState.currentQuality?.description ?: "画质"
+                                            setTextColor(android.graphics.Color.WHITE)
+                                            textSize = 13f
+                                            typeface = android.graphics.Typeface.DEFAULT_BOLD
+                                            gravity = android.view.Gravity.CENTER
+                                            layoutParams = LinearLayout.LayoutParams(
+                                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                                btnSize
+                                            ).also {
+                                                it.leftMargin = btnMargin
+                                                it.rightMargin = btnMargin
+                                            }
+                                            setMinWidth(btnSize)
+                                            setPadding((4 * density).toInt(), 0, (4 * density).toInt(), 0)
+                                            setOnClickListener { anchor ->
+                                                val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
+                                                val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
+                                                uiState.availableQualities.forEachIndexed { i, q ->
+                                                    popup.menu.add(0, i, 0, q.description).apply {
+                                                        if (q.quality == uiState.currentQuality?.quality) isChecked = true
+                                                    }
+                                                }
+                                                popup.menu.setGroupCheckable(0, true, true)
+                                                popup.setOnMenuItemClickListener { item ->
+                                                    val quality = uiState.availableQualities.getOrNull(item.itemId)
+                                                    if (quality != null) {
+                                                        onQualitySelected(quality)
+                                                        showSpeedToast = true
+                                                    }
+                                                    true
+                                                }
+                                                popup.show()
+                                            }
+                                        }
+                                        controlsRow.addView(qualityBtn, 0)
+                                    }
                                 }
                             }
 
@@ -522,6 +613,7 @@ private fun PlayerContent(
                     },
                     update = { view ->
                         view.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(speedCtl.baseSpeed)
+                        view.findViewWithTag<TextView>("quality_button")?.text = uiState.currentQuality?.description ?: "画质"
                     },
                     modifier = Modifier.fillMaxSize()
                 )

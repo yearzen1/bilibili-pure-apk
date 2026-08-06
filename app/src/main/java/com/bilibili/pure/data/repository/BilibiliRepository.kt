@@ -6,6 +6,8 @@ import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.api.PassportApi
 import com.bilibili.pure.data.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class BilibiliRepository(
     private val api: BilibiliApi = BilibiliApi.create(),
@@ -199,6 +201,34 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getPlayUrl exception", it) }
     }
 
+    suspend fun getPlayUrlDash(bvid: String, cid: Long): Result<PlayUrlInfo> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrlDash: bvid=$bvid cid=$cid fnval=16")
+        return runCatching {
+            val response = api.getPlayUrlDash(bvid = bvid, cid = cid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getPlayUrlDash response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                val playUrl = response.data ?: throw Exception("No play URL data")
+                if (BuildConfig.DEBUG) {
+                    val acceptDesc = playUrl.accept_description?.joinToString(", ") ?: "N/A"
+                    val acceptQual = playUrl.accept_quality?.joinToString(", ") ?: "N/A"
+                    val videoCount = playUrl.dash?.video?.size ?: 0
+                    val audioCount = playUrl.dash?.audio?.size ?: 0
+                    Log.d(BilibiliApp.TAG, "getPlayUrlDash success: accept=[$acceptQual]($acceptDesc) video=$videoCount audio=$audioCount")
+                    playUrl.dash?.video?.forEach { v ->
+                        Log.d(BilibiliApp.TAG, "  video: id=${v.id} ${v.width}x${v.height} codec=${v.codecs} bw=${v.bandwidth}")
+                    }
+                    playUrl.dash?.audio?.forEach { a ->
+                        Log.d(BilibiliApp.TAG, "  audio: id=${a.id} codec=${a.codecs} bw=${a.bandwidth}")
+                    }
+                }
+                playUrl
+            } else {
+                Log.w(BilibiliApp.TAG, "getPlayUrlDash failed: code=${response.code} msg=${response.message}")
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getPlayUrlDash exception", it) }
+    }
+
     suspend fun getComments(aid: Long, page: Int = 0): Result<CommentList> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getComments: aid=$aid page=$page")
         return runCatching {
@@ -297,6 +327,32 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getSpaceAccInfo failed", it) }
     }
 
+    suspend fun getNavInfo(): Result<NavInfo> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getNavInfo")
+        return runCatching {
+            val response = api.getNavInfo()
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getNavInfo response: code=${response.code} face=${response.data?.face}")
+            if (response.code == 0) {
+                response.data ?: throw Exception("Empty nav info")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getNavInfo failed", it) }
+    }
+
+    suspend fun getUserCard(mid: Long): Result<UserCardData> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getUserCard: mid=$mid")
+        return runCatching {
+            val response = api.getUserCard(mid = mid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getUserCard response: code=${response.code} face=${response.data?.card?.face}")
+            if (response.code == 0) {
+                response.data ?: throw Exception("Empty user card")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getUserCard failed", it) }
+    }
+
     suspend fun checkRelation(fid: Long): Result<Boolean> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "checkRelation: fid=$fid")
         return try {
@@ -338,5 +394,122 @@ class BilibiliRepository(
         }
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "isFollowing: not found after $page pages")
         return Result.success(false)
+    }
+
+    suspend fun getCaptcha(): Result<CaptchaData> {
+        return runCatching {
+            val response = passportApi.getCaptcha()
+            Log.d(BilibiliApp.TAG, "getCaptcha response: code=${response.code} type=${response.data?.type} token=${response.data?.token?.take(20)} challenge=${response.data?.geetest?.challenge?.take(20)}")
+            if (response.code == 0) response.data ?: throw Exception("Empty captcha")
+            else throw Exception(response.message)
+        }
+    }
+
+    suspend fun sendSmsCode(tel: String, token: String, challenge: String, validate: String, seccode: String): Result<SmsSendData> {
+        return runCatching {
+            Log.d(BilibiliApp.TAG, "sendSmsCode: tel=$tel token=${token.take(20)} challenge=${challenge.take(20)} validate=${validate.take(30)} seccode=${seccode.take(30)}")
+            val response = passportApi.sendSmsCode(tel = tel, token = token, challenge = challenge, validate = validate, seccode = seccode)
+            Log.d(BilibiliApp.TAG, "sendSmsCode response: code=${response.code} message=${response.message} data=${response.data}")
+            if (response.code == 0) response.data ?: throw Exception("Failed to send SMS")
+            else throw Exception(response.message)
+        }
+    }
+
+    suspend fun smsLoginRaw(tel: String, code: Int, captchaKey: String): Result<Map<String, String>> {
+        return runCatching {
+            val formBody = okhttp3.FormBody.Builder()
+                .add("cid", "86")
+                .add("tel", tel)
+                .add("code", code.toString())
+                .add("source", "main_web")
+                .add("captcha_key", captchaKey)
+                .add("go_url", "https://www.bilibili.com")
+                .add("keep", "1")
+                .build()
+            val request = okhttp3.Request.Builder()
+                .url("https://passport.bilibili.com/x/passport-login/web/login/sms")
+                .post(formBody)
+                .build()
+            withContext(Dispatchers.IO) {
+                val response = BilibiliApi.httpClient.newCall(request).execute()
+                val bodyStr = response.body?.string().orEmpty()
+                val cookies = mutableMapOf<String, String>()
+                response.headers("Set-Cookie").forEach { setCookie ->
+                    val part = setCookie.substringBefore(";")
+                    val eq = part.indexOf("=")
+                    if (eq > 0) cookies[part.substring(0, eq).trim()] = part.substring(eq + 1).trim()
+                }
+                response.close()
+                Log.d(BilibiliApp.TAG, "smsLoginRaw code=${response.code} cookies=${cookies.keys} body=$bodyStr")
+                val json = com.google.gson.Gson().fromJson(bodyStr, java.util.Map::class.java)
+                val rc = (json?.get("code") as? Number)?.toInt() ?: -1
+                if (rc != 0) {
+                    throw Exception(json?.get("message")?.toString() ?: "登录失败($rc)")
+                }
+                val hasSession = cookies.containsKey("SESSDATA") &&
+                        cookies.containsKey("bili_jct") &&
+                        cookies.containsKey("DedeUserID")
+                if (!hasSession) {
+                    val dataMsg = (json?.get("data") as? java.util.Map<*, *>)?.get("message")?.toString().orEmpty()
+                    throw Exception(dataMsg.ifBlank { "本次登录环境存在风险，无法获取登录凭证" })
+                }
+                cookies
+            }
+        }
+    }
+
+    suspend fun getWebKey(): Result<WebKeyData> {
+        return runCatching {
+            val response = passportApi.getWebKey()
+            if (response.code == 0) response.data ?: throw Exception("Empty key")
+            else throw Exception(response.message)
+        }
+    }
+
+    suspend fun passwordLoginRaw(username: String, password: String, token: String, challenge: String, validate: String, seccode: String): Result<Map<String, String>> {
+        return runCatching {
+            val formBody = okhttp3.FormBody.Builder()
+                .add("username", username)
+                .add("password", password)
+                .add("keep", "0")
+                .add("token", token)
+                .add("challenge", challenge)
+                .add("validate", validate)
+                .add("seccode", seccode)
+                .add("go_url", "https://www.bilibili.com")
+                .add("source", "main_web")
+                .build()
+            val request = okhttp3.Request.Builder()
+                .url("https://passport.bilibili.com/x/passport-login/web/login")
+                .post(formBody)
+                .build()
+            val cookies = withContext(Dispatchers.IO) {
+                val response = BilibiliApi.httpClient.newCall(request).execute()
+                val bodyStr = response.body?.string().orEmpty()
+                val c = mutableMapOf<String, String>()
+                response.headers("Set-Cookie").forEach { setCookie ->
+                    val part = setCookie.substringBefore(";")
+                    val eq = part.indexOf("=")
+                    if (eq > 0) c[part.substring(0, eq).trim()] = part.substring(eq + 1).trim()
+                }
+                response.close()
+                Log.d(BilibiliApp.TAG, "passwordLoginRaw code=${response.code} cookies=${c.keys} body=$bodyStr")
+                val json = com.google.gson.Gson().fromJson(bodyStr, java.util.Map::class.java)
+                val rc = (json?.get("code") as? Number)?.toInt() ?: -1
+                if (rc != 0) {
+                    throw Exception(json?.get("message")?.toString() ?: "登录失败($rc)")
+                }
+                val hasSession = c.containsKey("SESSDATA") &&
+                        c.containsKey("bili_jct") &&
+                        c.containsKey("DedeUserID")
+                if (!hasSession) {
+                    val dataMsg = (json?.get("data") as? java.util.Map<*, *>)?.get("message")?.toString().orEmpty()
+                    throw Exception(dataMsg.ifBlank { "本次登录环境存在风险，无法获取登录凭证" })
+                }
+                c
+            }
+            Log.d(BilibiliApp.TAG, "passwordLoginRaw cookies: ${cookies.keys}")
+            cookies
+        }
     }
 }

@@ -88,6 +88,17 @@ interface BilibiliApi {
         @Query("platform") platform: String = "android"
     ): ApiResponse<PlayUrlInfo>
 
+    @GET("x/player/playurl")
+    suspend fun getPlayUrlDash(
+        @Query("bvid") bvid: String,
+        @Query("cid") cid: Long,
+        @Query("qn") qn: Int = 80,
+        @Query("fnval") fnval: Int = 16,
+        @Query("fnver") fnver: Int = 0,
+        @Query("fourk") fourk: Int = 1,
+        @Query("platform") platform: String = "android"
+    ): ApiResponse<PlayUrlInfo>
+
     @GET("x/v3/fav/folder/created/list-all")
     suspend fun getFavFolders(
         @Query("up_mid") upMid: Long,
@@ -141,6 +152,12 @@ interface BilibiliApi {
 
     @GET("x/space/acc/info")
     suspend fun getSpaceAccInfo(@Query("mid") mid: Long): ApiResponse<SpaceAccInfo>
+
+    @GET("x/web-interface/nav")
+    suspend fun getNavInfo(): ApiResponse<NavInfo>
+
+    @GET("x/web-interface/card")
+    suspend fun getUserCard(@Query("mid") mid: Long): ApiResponse<UserCardData>
 
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
@@ -302,7 +319,7 @@ interface BilibiliApi {
                 .addInterceptor { chain ->
                     val orig = chain.request()
                     val url = orig.url.toString()
-                    val isCdn = !url.contains("api.bilibili.com")
+                    val isCdn = !url.contains("api.bilibili.com") && !url.contains("passport.bilibili.com")
                     val isSpaceApi = !isCdn && url.contains("/x/space/") && !url.contains("acc/info")
                     val spaceOrigin = "https://space.bilibili.com"
                     val apiOrigin = "https://www.bilibili.com"

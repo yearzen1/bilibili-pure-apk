@@ -7,6 +7,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.local.AppSettings
 import java.util.UUID
 
 class BilibiliApp : Application(), ImageLoaderFactory {
@@ -14,6 +15,7 @@ class BilibiliApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        AppSettings.init(this)
         val prefs = getSharedPreferences("bili_prefs", MODE_PRIVATE)
         if (!prefs.contains("buvid3")) {
             prefs.edit().putString("buvid3", UUID.randomUUID().toString()).apply()

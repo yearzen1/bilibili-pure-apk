@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +39,17 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.download.DownloadManager
+import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.model.QualityOption
+import com.bilibili.pure.data.model.PlayUrlInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun fixPic(url: String): String = when {
     url.startsWith("//") -> "https:$url"
@@ -68,6 +80,11 @@ fun DetailScreen(
     viewModel: DetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var availableQualities by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
+    var isLoadingQualities by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (uiState.videoInfo == null) {
@@ -92,7 +109,13 @@ fun DetailScreen(
             isLoading = uiState.isLoading,
             error = uiState.error,
             comments = uiState.comments,
-            onPlay = { onPlay(bvid) },
+            onPlay = {
+                if (AppSettings.wifiOnlyPlayback && !AppSettings.isWifiConnected(context)) {
+                    Toast.makeText(context, "当前为移动网络，仅WiFi下可播放", Toast.LENGTH_SHORT).show()
+                } else {
+                    onPlay(bvid)
+                }
+            },
             onUploaderClick = onUploaderClick,
             onUserClick = onUserClick,
             modifier = Modifier.padding(padding),
@@ -109,9 +132,108 @@ fun DetailScreen(
             isLoggedIn = uiState.isLoggedIn,
             isFollowed = uiState.isFollowed,
             isTogglingFollow = uiState.isTogglingFollow,
-            onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) }
+            onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) },
+            onDownload = {
+                if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
+                    Toast.makeText(context, "当前为移动网络，仅WiFi下可下载", Toast.LENGTH_SHORT).show()
+                    return@DetailContent
+                }
+                scope.launch {
+                    isLoadingQualities = true
+                    try {
+                        val api = BilibiliApi.create()
+                        val response = withContext(Dispatchers.IO) {
+                            api.getPlayUrlDash(bvid = bvid, cid = uiState.videoInfo?.cid ?: 0)
+                        }
+                        if (response.code == 0) {
+                            val info = response.data
+                            val qualities = info?.accept_quality?.zip(info.accept_description ?: emptyList()) { q, desc ->
+                                QualityOption(quality = q, description = desc)
+                            } ?: emptyList()
+                            availableQualities = qualities
+                            showQualityDialog = qualities.isNotEmpty()
+                        } else {
+                            Toast.makeText(context, "获取画质信息失败", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "获取画质信息失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    } finally {
+                        isLoadingQualities = false
+                    }
+                }
+            }
         )
     }
+
+    if (showQualityDialog && uiState.videoInfo != null) {
+        val videoInfo = uiState.videoInfo!!
+        QualitySelectionDialog(
+            qualities = availableQualities,
+            onSelect = { quality ->
+                showQualityDialog = false
+                scope.launch {
+                    try {
+                        val api = BilibiliApi.create()
+                        val response = withContext(Dispatchers.IO) {
+                            api.getPlayUrl(bvid = bvid, cid = videoInfo.cid, qn = quality.quality)
+                        }
+                        if (response.code == 0) {
+                            val url = response.data?.durl?.firstOrNull()?.url
+                            if (url != null) {
+                                DownloadManager.getInstance(context).startDownload(
+                                    bvid = bvid,
+                                    cid = videoInfo.cid,
+                                    title = videoInfo.title,
+                                    cover = videoInfo.pic,
+                                    quality = quality.quality,
+                                    qualityDesc = quality.description,
+                                    url = url
+                                )
+                                Toast.makeText(context, "开始下载: ${videoInfo.title}", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "获取下载链接失败", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "获取下载链接失败", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "下载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { showQualityDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun QualitySelectionDialog(
+    qualities: List<QualityOption>,
+    onSelect: (QualityOption) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择画质") },
+        text = {
+            Column {
+                qualities.forEach { quality ->
+                    TextButton(
+                        onClick = { onSelect(quality) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(quality.description, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 @Composable
@@ -137,7 +259,8 @@ private fun DetailContent(
     isLoggedIn: Boolean = false,
     isFollowed: Boolean = false,
     isTogglingFollow: Boolean = false,
-    onFollowUploader: (mid: Long) -> Unit = {}
+    onFollowUploader: (mid: Long) -> Unit = {},
+    onDownload: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
 
@@ -239,22 +362,6 @@ private fun DetailContent(
                         StatChip("点赞", formatCount(videoInfo.stat.like))
                         StatChip("弹幕", formatCount(videoInfo.stat.danmaku))
                         StatChip("评论", formatCount(videoInfo.stat.reply))
-                        Spacer(modifier = Modifier.weight(1f))
-                        IconButton(
-                            onClick = onToggleFavorite,
-                            enabled = !isTogglingFavorite
-                        ) {
-                            Icon(
-                                imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                contentDescription = if (isFavorited) "取消收藏" else "收藏",
-                                tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            text = formatCount(favoriteCount),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
 
@@ -286,6 +393,35 @@ private fun DetailContent(
                             TextButton(onClick = { expanded = !expanded }) {
                                 Text(if (expanded) "收起" else "展开全部")
                             }
+                        }
+                    }
+                }
+
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onToggleFavorite,
+                            enabled = !isTogglingFavorite
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isFavorited) "取消收藏" else "收藏",
+                                tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = formatCount(favoriteCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = onDownload) {
+                            Icon(
+                                imageVector = Icons.Outlined.FileDownload,
+                                contentDescription = "下载",
+                                modifier = Modifier.size(26.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

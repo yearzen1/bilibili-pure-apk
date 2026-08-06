@@ -59,7 +59,12 @@ fun LoginScreen(
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("账号密码登录") }
+                    text = { Text("短信登录") }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("密码登录") }
                 )
             }
 
@@ -143,6 +148,13 @@ fun LoginScreen(
                 }
 
                 1 -> {
+                    SmsLoginContent(
+                        onLoginSuccess = onLoginSuccess,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                2 -> {
                     PasswordLoginContent(
                         onLoginSuccess = onLoginSuccess,
                         modifier = Modifier.fillMaxSize()

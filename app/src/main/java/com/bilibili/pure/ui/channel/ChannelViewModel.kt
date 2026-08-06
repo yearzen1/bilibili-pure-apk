@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.SpaceAccInfo
+import com.bilibili.pure.data.model.UserCardData
 import com.bilibili.pure.data.model.UserSpacePage
 import com.bilibili.pure.data.model.UserVideoItem
 import com.bilibili.pure.data.repository.BilibiliRepository
@@ -25,6 +26,7 @@ data class ChannelUiState(
     val hasMore: Boolean = true,
     val loadingMore: Boolean = false,
     val spaceAccInfo: SpaceAccInfo? = null,
+    val userCard: UserCardData? = null,
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false
@@ -64,9 +66,7 @@ class ChannelViewModel(
                         hasMore = page?.let { it.pn * it.ps < it.count } ?: false,
                         isLoggedIn = isLoggedIn
                     )
-                    if (isLoggedIn) {
-                        loadSpaceInfo(mid)
-                    }
+                    loadSpaceInfo(mid)
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "ChannelVM: load failed", e)
@@ -76,9 +76,16 @@ class ChannelViewModel(
     }
 
     private suspend fun loadSpaceInfo(mid: Long) {
-        repository.getSpaceAccInfo(mid)
-            .onSuccess { info ->
-                _uiState.value = _uiState.value.copy(spaceAccInfo = info)
+        repository.getUserCard(mid)
+            .onSuccess { card ->
+                val info = card.card?.let {
+                    SpaceAccInfo(mid = it.mid, name = it.name, face = it.face, sign = it.sign, attribute = 0)
+                }
+                _uiState.value = _uiState.value.copy(
+                    spaceAccInfo = info ?: _uiState.value.spaceAccInfo,
+                    userCard = card,
+                    isFollowed = card.following
+                )
             }
             .onFailure {
                 Log.e(BilibiliApp.TAG, "ChannelVM: loadSpaceInfo failed", it)

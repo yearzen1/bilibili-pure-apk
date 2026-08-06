@@ -7,8 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.local.PlaybackProgressManager
-import com.bilibili.pure.data.model.VideoInfo
-import com.bilibili.pure.data.model.VideoPage
+import com.bilibili.pure.data.model.*
+import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +24,12 @@ data class PlayerUiState(
     val pages: List<VideoPage> = emptyList(),
     val title: String = "",
     val historyProgress: Long = 0L,
-    val historyCid: Long = 0L
+    val historyCid: Long = 0L,
+    val availableQualities: List<QualityOption> = emptyList(),
+    val currentQuality: QualityOption? = null,
+    val dashVideo: DashStream? = null,
+    val dashAudio: DashStream? = null,
+    val isDash: Boolean = false
 )
 
 class PlayerViewModel(
@@ -36,6 +41,8 @@ class PlayerViewModel(
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    private var cachedDashData: DashData? = null
 
     fun load(bvid: String) {
         Log.d(BilibiliApp.TAG, "PlayerVM: load bvid=$bvid")
@@ -69,7 +76,7 @@ class PlayerViewModel(
                         historyCid = historyCid
                     )
                     Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> progress=${historyProgress}s pageCid=${historyCid} startCid=${startPage.cid}")
-                    loadPlayUrl(bvid, startPage.cid)
+                    loadPlayUrlDash(bvid, startPage.cid)
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "PlayerVM: load failed", e)
@@ -78,11 +85,41 @@ class PlayerViewModel(
         }
     }
 
+    fun loadLocal(filePath: String) {
+        Log.d(BilibiliApp.TAG, "PlayerVM: loadLocal filePath=$filePath")
+        _uiState.value = PlayerUiState(
+            isLoading = false,
+            videoUrl = "file://$filePath",
+            title = filePath.substringAfterLast("/").substringBeforeLast("."),
+            isDash = false
+        )
+    }
+
     fun selectPage(page: VideoPage) {
         val bvid = _uiState.value.videoInfo?.bvid ?: return
         Log.d(BilibiliApp.TAG, "PlayerVM: selectPage page=${page.page} cid=${page.cid} part=${page.part}")
         _uiState.value = _uiState.value.copy(currentPage = page, isLoading = true, videoUrl = null)
-        loadPlayUrl(bvid, page.cid)
+        loadPlayUrlDash(bvid, page.cid)
+    }
+
+    fun selectQuality(quality: QualityOption) {
+        val bvid = _uiState.value.videoInfo?.bvid ?: return
+        val cid = _uiState.value.currentPage?.cid ?: return
+        if (quality.quality == _uiState.value.currentQuality?.quality) return
+        Log.d(BilibiliApp.TAG, "PlayerVM: selectQuality qn=${quality.quality} desc=${quality.description}")
+
+        val dash = cachedDashData ?: return
+        val videoStream = pickVideoStream(dash.video, quality.quality) ?: return
+        val audioStream = dash.audio?.firstOrNull() ?: dash.flac?.audio
+
+        val url = videoStream.getUrl()
+        _uiState.value = _uiState.value.copy(
+            currentQuality = quality,
+            videoUrl = url,
+            dashVideo = videoStream,
+            dashAudio = audioStream,
+            isDash = true
+        )
     }
 
     fun reportProgress(aid: Long, cid: Long, progress: Long, duration: Long = 0L) {
@@ -96,17 +133,78 @@ class PlayerViewModel(
         }
     }
 
-    private fun loadPlayUrl(bvid: String, cid: Long) {
+    private fun loadPlayUrlDash(bvid: String, cid: Long) {
         viewModelScope.launch {
-            repository.getPlayUrl(bvid, cid)
-                .onSuccess { url ->
-                    Log.d(BilibiliApp.TAG, "PlayerVM: playUrl loaded")
-                    _uiState.value = _uiState.value.copy(videoUrl = url, isLoading = false)
+            repository.getPlayUrlDash(bvid, cid)
+                .onSuccess { playUrlInfo ->
+                    Log.d(BilibiliApp.TAG, "PlayerVM: dash loaded, accept=${playUrlInfo.accept_quality}")
+                    val dash = playUrlInfo.dash
+                    if (dash != null) {
+                        cachedDashData = dash
+
+                        val qualities = buildQualityList(playUrlInfo)
+                        val defaultQuality = qualities.firstOrNull()
+
+                        val videoStream = defaultQuality?.let { pickVideoStream(dash.video, it.quality) }
+                        val audioStream = dash.audio?.firstOrNull() ?: dash.flac?.audio
+
+                        val videoUrl = videoStream?.getUrl()
+
+                        _uiState.value = _uiState.value.copy(
+                            videoUrl = videoUrl,
+                            availableQualities = qualities,
+                            currentQuality = defaultQuality,
+                            dashVideo = videoStream,
+                            dashAudio = audioStream,
+                            isDash = true,
+                            isLoading = false
+                        )
+                        Log.d(BilibiliApp.TAG, "PlayerVM: default quality=${defaultQuality?.description} videoUrl=${videoUrl?.take(80)}")
+                    } else {
+                        val url = playUrlInfo.durl?.firstOrNull()?.url
+                        if (url != null) {
+                            _uiState.value = _uiState.value.copy(
+                                videoUrl = url,
+                                isDash = false,
+                                isLoading = false
+                            )
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "无法获取播放链接"
+                            )
+                        }
+                    }
                 }
                 .onFailure { e ->
-                    Log.e(BilibiliApp.TAG, "PlayerVM: loadPlayUrl failed", e)
+                    Log.e(BilibiliApp.TAG, "PlayerVM: loadPlayUrlDash failed", e)
                     _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "加载播放链接失败")
                 }
         }
+    }
+
+    private fun buildQualityList(playUrlInfo: PlayUrlInfo): List<QualityOption> {
+        val acceptQuality = playUrlInfo.accept_quality ?: return emptyList()
+        val acceptDesc = playUrlInfo.accept_description ?: return emptyList()
+
+        return acceptQuality.zip(acceptDesc).map { (q, desc) ->
+            QualityOption(quality = q, description = desc)
+        }
+    }
+
+    private fun pickVideoStream(videos: List<DashStream>?, targetQuality: Int): DashStream? {
+        if (videos.isNullOrEmpty()) return null
+
+        val matching = videos.filter { it.id == targetQuality }
+        if (matching.isNotEmpty()) {
+            return matching.minByOrNull { it.bandwidth } ?: matching.first()
+        }
+
+        val lower = videos.filter { it.id < targetQuality }
+        if (lower.isNotEmpty()) {
+            return lower.maxByOrNull { it.id } ?: lower.first()
+        }
+
+        return videos.minByOrNull { it.id }
     }
 }
