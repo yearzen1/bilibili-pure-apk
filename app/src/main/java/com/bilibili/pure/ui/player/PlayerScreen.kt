@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.util.Log
-import android.view.ContextThemeWrapper
 import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -12,9 +11,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
 import android.media.AudioManager
-import android.widget.LinearLayout
-import android.widget.PopupMenu
-import android.widget.TextView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -67,7 +63,7 @@ fun PlayerScreen(
 ) {
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
-    var isFullscreen by remember { mutableStateOf(false) }
+    var isFullscreen by remember { mutableStateOf(true) }
     var playing by remember { mutableStateOf(false) }
     var initialSeekDone by remember { mutableStateOf(false) }
 
@@ -236,8 +232,11 @@ fun PlayerScreen(
     }
 
     fun toggleFullscreen() {
-        val activity = context as? Activity ?: return
         isFullscreen = !isFullscreen
+    }
+
+    LaunchedEffect(isFullscreen) {
+        val activity = context as? Activity ?: return@LaunchedEffect
         if (isFullscreen) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 activity.window.insetsController?.hide(android.view.WindowInsets.Type.systemBars())
@@ -370,6 +369,8 @@ private fun PlayerContent(
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val controlBar = remember { PlayerControlBar(onQualitySelected) }
+    var showBackButton by remember { mutableStateOf(true) }
     var showSpeedToast by remember { mutableStateOf(false) }
     var showBrightnessOverlay by remember { mutableStateOf(false) }
     var showVolumeOverlay by remember { mutableStateOf(false) }
@@ -421,92 +422,14 @@ private fun PlayerContent(
                                 onFullscreenToggle()
                             }
 
-                            val settingsId = ctx.resources.getIdentifier("exo_settings", "id", ctx.packageName)
-                            if (settingsId != 0) {
-                                val settingsView = view.findViewById<View>(settingsId)
-                                val controlsRow = settingsView?.parent as? ViewGroup
-                                if (controlsRow != null) {
-                                    if (controlsRow.findViewWithTag<View>("speed_button") == null) {
-                                        val density = ctx.resources.displayMetrics.density
-                                        val btnSize = (48 * density).toInt()
-                                        val btnMargin = (2 * density).toInt()
-                                        val speedBtn = TextView(ctx).apply {
-                                            tag = "speed_button"
-                                            text = "1.0x"
-                                            setTextColor(android.graphics.Color.WHITE)
-                                            textSize = 13f
-                                            typeface = android.graphics.Typeface.DEFAULT_BOLD
-                                            gravity = android.view.Gravity.CENTER
-                                            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).also {
-                                                it.leftMargin = btnMargin
-                                                it.rightMargin = btnMargin
-                                            }
-                                            setOnClickListener { anchor ->
-                                                val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
-                                                val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
-                                                val speeds = listOf(0.5f, 1.0f, 2.0f, 3.0f)
-                                                speeds.forEachIndexed { i, speed ->
-                                                    popup.menu.add(0, i, 0, "%.1fx".format(speed)).apply {
-                                                        if (speed == speedCtl.baseSpeed) isChecked = true
-                                                     }
-                                                 }
-                                                 popup.menu.setGroupCheckable(0, true, true)
-                                                 popup.setOnMenuItemClickListener { item ->
-                                                     val speed = speeds.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
-                                                     speedCtl.setBase(speed)
-                                                     showSpeedToast = true
-                                                     true
-                                                 }
-                                                popup.show()
-                                            }
-                                        }
-                                        controlsRow.addView(speedBtn, 0)
-                                    }
+                            controlBar.attach(ctx, view, speedCtl)
 
-                                    if (uiState.availableQualities.size > 1 && controlsRow.findViewWithTag<View>("quality_button") == null) {
-                                        val density = ctx.resources.displayMetrics.density
-                                        val btnSize = (48 * density).toInt()
-                                        val btnMargin = (2 * density).toInt()
-                                        val qualityBtn = TextView(ctx).apply {
-                                            tag = "quality_button"
-                                            text = uiState.currentQuality?.description ?: "画质"
-                                            setTextColor(android.graphics.Color.WHITE)
-                                            textSize = 13f
-                                            typeface = android.graphics.Typeface.DEFAULT_BOLD
-                                            gravity = android.view.Gravity.CENTER
-                                            layoutParams = LinearLayout.LayoutParams(
-                                                ViewGroup.LayoutParams.WRAP_CONTENT,
-                                                btnSize
-                                            ).also {
-                                                it.leftMargin = btnMargin
-                                                it.rightMargin = btnMargin
-                                            }
-                                            setMinWidth(btnSize)
-                                            setPadding((4 * density).toInt(), 0, (4 * density).toInt(), 0)
-                                            setOnClickListener { anchor ->
-                                                val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
-                                                val popup = PopupMenu(darkCtx, anchor, android.view.Gravity.TOP)
-                                                uiState.availableQualities.forEachIndexed { i, q ->
-                                                    popup.menu.add(0, i, 0, q.description).apply {
-                                                        if (q.quality == uiState.currentQuality?.quality) isChecked = true
-                                                    }
-                                                }
-                                                popup.menu.setGroupCheckable(0, true, true)
-                                                popup.setOnMenuItemClickListener { item ->
-                                                    val quality = uiState.availableQualities.getOrNull(item.itemId)
-                                                    if (quality != null) {
-                                                        onQualitySelected(quality)
-                                                        showSpeedToast = true
-                                                    }
-                                                    true
-                                                }
-                                                popup.show()
-                                            }
-                                        }
-                                        controlsRow.addView(qualityBtn, 0)
-                                    }
+                            view.setControllerVisibilityListener(object : PlayerView.ControllerVisibilityListener {
+                                override fun onVisibilityChanged(visibility: Int) {
+                                    showBackButton = (visibility == View.VISIBLE)
                                 }
-                            }
+                            })
+                            showBackButton = view.isControllerFullyVisible()
 
                             var touchStartX = 0f
                             var touchStartY = 0f
@@ -611,11 +534,28 @@ private fun PlayerContent(
                             }
                         }
                     },
-                    update = { view ->
-                        view.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(speedCtl.baseSpeed)
-                        view.findViewWithTag<TextView>("quality_button")?.text = uiState.currentQuality?.description ?: "画质"
+                    update = {
+                        controlBar.update(speedCtl.baseSpeed, uiState.currentQuality, uiState.availableQualities)
                     },
                     modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        if (isFullscreen && showBackButton) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50))
+                    .size(36.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回视频详情",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
