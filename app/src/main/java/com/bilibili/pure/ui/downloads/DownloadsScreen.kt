@@ -15,9 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.model.DownloadInfo
 
 private fun fixPic(url: String): String = when {
@@ -34,6 +36,8 @@ fun DownloadsScreen(
     viewModel: DownloadsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val downloads by viewModel.downloads.collectAsState()
+    val context = LocalContext.current
+    var confirmResume by remember { mutableStateOf<DownloadInfo?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -93,11 +97,38 @@ fun DownloadsScreen(
                         onPlay = { onPlay(download.filePath) },
                         onDelete = { viewModel.deleteDownload(download) },
                         onPause = { viewModel.pauseDownload(download) },
-                        onResume = { viewModel.resumeDownload(download) }
+                        onResume = {
+                            if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
+                                confirmResume = download
+                            } else {
+                                viewModel.resumeDownload(download)
+                            }
+                        }
                     )
                 }
             }
         }
+    }
+
+    confirmResume?.let { dl ->
+        AlertDialog(
+            onDismissRequest = { confirmResume = null },
+            title = { Text("移动网络下载") },
+            text = { Text("当前为移动网络，继续下载「${dl.title}」将消耗流量，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmResume = null
+                    viewModel.resumeDownload(dl)
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmResume = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
@@ -146,13 +177,13 @@ private fun DownloadItem(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    if (download.status == DownloadInfo.STATUS_DOWNLOADING && download.totalSize > 0) {
+                    if ((download.status == DownloadInfo.STATUS_DOWNLOADING || download.status == DownloadInfo.STATUS_PAUSED) && download.totalSize > 0) {
                         Text(
                             text = "${formatFileSize(download.fileSize)} / ${formatFileSize(download.totalSize)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (download.speed > 0) {
+                        if (download.status == DownloadInfo.STATUS_DOWNLOADING && download.speed > 0) {
                             Text(
                                 text = formatSpeed(download.speed),
                                 style = MaterialTheme.typography.labelSmall,
@@ -215,7 +246,7 @@ private fun DownloadItem(
                 }
             }
 
-            if (download.status == DownloadInfo.STATUS_DOWNLOADING && download.totalSize > 0) {
+            if ((download.status == DownloadInfo.STATUS_DOWNLOADING || download.status == DownloadInfo.STATUS_PAUSED) && download.totalSize > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { (download.fileSize.toFloat() / download.totalSize).coerceIn(0f, 1f) },

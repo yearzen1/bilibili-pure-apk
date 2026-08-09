@@ -79,9 +79,10 @@ class DownloadManager(private val context: Context) {
         cover: String,
         quality: Int,
         qualityDesc: String,
-        url: String
+        url: String,
+        overrideWifiOnly: Boolean = false
     ) {
-        if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
+        if (!overrideWifiOnly && AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
             Log.d(TAG, "Download blocked: WiFi-only mode and not on WiFi")
             return
         }
@@ -242,9 +243,10 @@ class DownloadManager(private val context: Context) {
             Log.d(TAG, "Download paused: ${info.id} at $currentSize bytes")
         } catch (e: Exception) {
             val currentSize = file.length()
+            val isWifiOnlyBlocked = AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)
             updateDownload(info.id) {
                 it.copy(
-                    status = DownloadInfo.STATUS_FAILED,
+                    status = if (isWifiOnlyBlocked) DownloadInfo.STATUS_PAUSED else DownloadInfo.STATUS_FAILED,
                     fileSize = currentSize
                 )
             }
@@ -259,6 +261,17 @@ class DownloadManager(private val context: Context) {
             pausedBytes[id] = currentSize
         }
         updateDownload(id) { it.copy(status = DownloadInfo.STATUS_PAUSED, fileSize = currentSize) }
+    }
+
+    fun pauseForWifi() {
+        val active = getDownloads().filter {
+            it.status == DownloadInfo.STATUS_PENDING || it.status == DownloadInfo.STATUS_DOWNLOADING
+        }
+        if (active.isEmpty()) return
+        Log.d(TAG, "Pausing ${active.size} downloads for wifi loss")
+        active.forEach { d ->
+            pauseDownload(d.id)
+        }
     }
 
     fun resumeDownload(id: String) {

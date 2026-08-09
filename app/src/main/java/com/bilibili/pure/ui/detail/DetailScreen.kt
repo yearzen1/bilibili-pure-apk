@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,11 +41,13 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.model.DownloadInfo
 import com.bilibili.pure.data.model.QualityOption
 import com.bilibili.pure.data.model.PlayUrlInfo
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +88,48 @@ fun DetailScreen(
     var showQualityDialog by remember { mutableStateOf(false) }
     var availableQualities by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
     var isLoadingQualities by remember { mutableStateOf(false) }
+    var confirmMobilePlay by remember { mutableStateOf(false) }
+    var confirmMobileDownload by remember { mutableStateOf(false) }
+
+    fun startDownloadFlow() {
+        val dm = DownloadManager.getInstance(context)
+        val existing = dm.getDownload("${bvid}_${uiState.videoInfo?.cid ?: 0}")
+        if (existing != null) {
+            val msg = when (existing.status) {
+                DownloadInfo.STATUS_COMPLETED -> "该视频已下载，可在“我的下载”中查看"
+                DownloadInfo.STATUS_DOWNLOADING,
+                DownloadInfo.STATUS_PENDING -> "正在下载中，请稍候"
+                DownloadInfo.STATUS_PAUSED -> "下载已暂停，请到“我的下载”继续"
+                DownloadInfo.STATUS_FAILED -> "上次下载失败，请到“我的下载”重试"
+                else -> "该视频已在下载列表中"
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            isLoadingQualities = true
+            try {
+                val api = BilibiliApi.create()
+                val response = withContext(Dispatchers.IO) {
+                    api.getPlayUrlDash(bvid = bvid, cid = uiState.videoInfo?.cid ?: 0)
+                }
+                if (response.code == 0) {
+                    val info = response.data
+                    val qualities = info?.accept_quality?.zip(info.accept_description ?: emptyList()) { q, desc ->
+                        QualityOption(quality = q, description = desc)
+                    } ?: emptyList()
+                    availableQualities = qualities
+                    showQualityDialog = qualities.isNotEmpty()
+                } else {
+                    Toast.makeText(context, "获取画质信息失败", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "获取画质信息失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isLoadingQualities = false
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (uiState.videoInfo == null) {
@@ -111,7 +156,7 @@ fun DetailScreen(
             comments = uiState.comments,
             onPlay = {
                 if (AppSettings.wifiOnlyPlayback && !AppSettings.isWifiConnected(context)) {
-                    Toast.makeText(context, "当前为移动网络，仅WiFi下可播放", Toast.LENGTH_SHORT).show()
+                    confirmMobilePlay = true
                 } else {
                     onPlay(bvid)
                 }
@@ -135,31 +180,9 @@ fun DetailScreen(
             onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) },
             onDownload = {
                 if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
-                    Toast.makeText(context, "当前为移动网络，仅WiFi下可下载", Toast.LENGTH_SHORT).show()
-                    return@DetailContent
-                }
-                scope.launch {
-                    isLoadingQualities = true
-                    try {
-                        val api = BilibiliApi.create()
-                        val response = withContext(Dispatchers.IO) {
-                            api.getPlayUrlDash(bvid = bvid, cid = uiState.videoInfo?.cid ?: 0)
-                        }
-                        if (response.code == 0) {
-                            val info = response.data
-                            val qualities = info?.accept_quality?.zip(info.accept_description ?: emptyList()) { q, desc ->
-                                QualityOption(quality = q, description = desc)
-                            } ?: emptyList()
-                            availableQualities = qualities
-                            showQualityDialog = qualities.isNotEmpty()
-                        } else {
-                            Toast.makeText(context, "获取画质信息失败", Toast.LENGTH_SHORT).show()
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "获取画质信息失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                    } finally {
-                        isLoadingQualities = false
-                    }
+                    confirmMobileDownload = true
+                } else {
+                    startDownloadFlow()
                 }
             }
         )
@@ -187,7 +210,8 @@ fun DetailScreen(
                                     cover = videoInfo.pic,
                                     quality = quality.quality,
                                     qualityDesc = quality.description,
-                                    url = url
+                                    url = url,
+                                    overrideWifiOnly = true
                                 )
                                 Toast.makeText(context, "开始下载: ${videoInfo.title}", Toast.LENGTH_SHORT).show()
                             } else {
@@ -202,6 +226,48 @@ fun DetailScreen(
                 }
             },
             onDismiss = { showQualityDialog = false }
+        )
+    }
+
+    if (confirmMobilePlay) {
+        AlertDialog(
+            onDismissRequest = { confirmMobilePlay = false },
+            title = { Text("移动网络播放") },
+            text = { Text("当前为移动网络，播放将消耗流量，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMobilePlay = false
+                    onPlay(bvid)
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMobilePlay = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (confirmMobileDownload) {
+        AlertDialog(
+            onDismissRequest = { confirmMobileDownload = false },
+            title = { Text("移动网络下载") },
+            text = { Text("当前为移动网络，下载将消耗流量，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMobileDownload = false
+                    startDownloadFlow()
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMobileDownload = false }) {
+                    Text("取消")
+                }
+            }
         )
     }
 }
@@ -263,6 +329,7 @@ private fun DetailContent(
     onDownload: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     val nearBottom by remember {
         derivedStateOf {
@@ -420,6 +487,28 @@ private fun DetailContent(
                                 imageVector = Icons.Outlined.FileDownload,
                                 contentDescription = "下载",
                                 modifier = Modifier.size(26.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(onClick = {
+                            val title = videoInfo.title
+                            val url = "https://www.bilibili.com/video/${videoInfo.bvid}"
+                            val shareText = "【$title】$url"
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            }
+                            try {
+                                context.startActivity(Intent.createChooser(intent, "分享到"))
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "未找到可分享的应用", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Share,
+                                contentDescription = "分享",
+                                modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

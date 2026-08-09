@@ -23,8 +23,7 @@ data class PlayerUiState(
     val currentPage: VideoPage? = null,
     val pages: List<VideoPage> = emptyList(),
     val title: String = "",
-    val historyProgress: Long = 0L,
-    val historyCid: Long = 0L,
+    val resumePositionMs: Long = 0L,
     val availableQualities: List<QualityOption> = emptyList(),
     val currentQuality: QualityOption? = null,
     val dashVideo: DashStream? = null,
@@ -57,25 +56,23 @@ class PlayerViewModel(
 
                     val firstPage = pages.first()
 
-                    val localProgress = playbackProgressManager.load(info.aid)
-                    val historyProgress = localProgress?.progress ?: 0L
-                    val historyCid = localProgress?.cid ?: 0L
-
-                    val startPage = if (historyCid > 0) {
-                        pages.find { it.cid == historyCid } ?: firstPage
+                    val lastPageCid = playbackProgressManager.lastCid(info.aid)
+                    val startPage = if (lastPageCid != null) {
+                        pages.find { it.cid == lastPageCid } ?: firstPage
                     } else {
                         firstPage
                     }
+
+                    val resumeMs = (playbackProgressManager.load(info.aid, startPage.cid) ?: 0L) * 1000L
 
                     _uiState.value = _uiState.value.copy(
                         videoInfo = info,
                         pages = pages,
                         currentPage = startPage,
                         title = info.title,
-                        historyProgress = historyProgress,
-                        historyCid = historyCid
+                        resumePositionMs = resumeMs
                     )
-                    Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> progress=${historyProgress}s pageCid=${historyCid} startCid=${startPage.cid}")
+                    Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> pageCid=${startPage.cid} resumeMs=${resumeMs}")
                     loadPlayUrlDash(bvid, startPage.cid)
                 }
                 .onFailure { e ->
@@ -96,9 +93,19 @@ class PlayerViewModel(
     }
 
     fun selectPage(page: VideoPage) {
-        val bvid = _uiState.value.videoInfo?.bvid ?: return
+        val info = _uiState.value.videoInfo ?: return
+        val bvid = info.bvid
         Log.d(BilibiliApp.TAG, "PlayerVM: selectPage page=${page.page} cid=${page.cid} part=${page.part}")
-        _uiState.value = _uiState.value.copy(currentPage = page, isLoading = true, videoUrl = null)
+
+        // Resume this page's own progress (never inherit the previous page's position).
+        val resumeMs = (playbackProgressManager.load(info.aid, page.cid) ?: 0L) * 1000L
+
+        _uiState.value = _uiState.value.copy(
+            currentPage = page,
+            resumePositionMs = resumeMs,
+            isLoading = true,
+            videoUrl = null
+        )
         loadPlayUrlDash(bvid, page.cid)
     }
 

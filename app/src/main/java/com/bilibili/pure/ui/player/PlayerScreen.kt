@@ -50,6 +50,8 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.R
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.local.WifiMonitor
 import com.bilibili.pure.data.model.QualityOption
 import kotlinx.coroutines.delay
 
@@ -65,7 +67,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     var isFullscreen by remember { mutableStateOf(true) }
     var playing by remember { mutableStateOf(false) }
-    var initialSeekDone by remember { mutableStateOf(false) }
+    var lastPreparedCid by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(bvid, localFilePath) {
         if (!localFilePath.isNullOrBlank()) {
@@ -130,6 +132,29 @@ fun PlayerScreen(
 
     val speedCtl = remember { SpeedController(player) }
 
+    val pausedByWifi = remember { mutableStateOf(false) }
+    var confirmMobileResumePlay by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        WifiMonitor.wifiLost.collect {
+            if (AppSettings.wifiOnlyPlayback && localFilePath.isNullOrBlank() && player.isPlaying) {
+                pausedByWifi.value = true
+                player.pause()
+                android.widget.Toast.makeText(context, "WiFi已断开，播放已暂停", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        WifiMonitor.wifiRestored.collect {
+            if (pausedByWifi.value) {
+                pausedByWifi.value = false
+                player.play()
+                android.widget.Toast.makeText(context, "WiFi已恢复，继续播放", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             val aid = uiState.videoInfo?.aid
@@ -162,8 +187,9 @@ fun PlayerScreen(
         uiState.videoUrl?.let { url ->
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: preparing media url=${url.take(80)}... isDash=${uiState.isDash}")
 
-            val currentPosition = if (!initialSeekDone && uiState.historyProgress > 0L && uiState.historyCid == uiState.currentPage?.cid) {
-                uiState.historyProgress * 1000L
+            val pageChanged = lastPreparedCid != uiState.currentPage?.cid
+            val currentPosition = if (pageChanged) {
+                uiState.resumePositionMs
             } else {
                 player.currentPosition
             }
@@ -198,6 +224,7 @@ fun PlayerScreen(
 
             player.setMediaSource(mediaSource)
             player.prepare()
+            lastPreparedCid = uiState.currentPage?.cid
 
             if (currentPosition > 0) {
                 val seekMs = currentPosition
@@ -211,7 +238,6 @@ fun PlayerScreen(
                     }
                 }
                 player.addListener(listener)
-                initialSeekDone = true
             }
         }
     }
@@ -274,7 +300,9 @@ fun PlayerScreen(
                 onFullscreenToggle = { toggleFullscreen() },
                 onQualitySelected = { vm.selectQuality(it) },
                 isFullscreen = true,
-                onBack = onBack
+                onBack = onBack,
+                isPausedByWifi = { pausedByWifi.value },
+                onMobileResumePlayRequested = { confirmMobileResumePlay = true }
             )
         }
     } else {
@@ -317,7 +345,9 @@ fun PlayerScreen(
                         onFullscreenToggle = { toggleFullscreen() },
                         onQualitySelected = { vm.selectQuality(it) },
                         isFullscreen = false,
-                        onBack = onBack
+                        onBack = onBack,
+                        isPausedByWifi = { pausedByWifi.value },
+                        onMobileResumePlayRequested = { confirmMobileResumePlay = true }
                     )
                 }
 
@@ -356,6 +386,28 @@ fun PlayerScreen(
             }
         }
     }
+
+    if (confirmMobileResumePlay) {
+        AlertDialog(
+            onDismissRequest = { confirmMobileResumePlay = false },
+            title = { Text("移动网络播放") },
+            text = { Text("当前为移动网络，继续播放将消耗流量，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMobileResumePlay = false
+                    pausedByWifi.value = false
+                    player.play()
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMobileResumePlay = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -366,7 +418,9 @@ private fun PlayerContent(
     onFullscreenToggle: () -> Unit,
     onQualitySelected: (QualityOption) -> Unit,
     isFullscreen: Boolean,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    isPausedByWifi: () -> Boolean = { false },
+    onMobileResumePlayRequested: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val controlBar = remember { PlayerControlBar(onQualitySelected) }
@@ -423,6 +477,15 @@ private fun PlayerContent(
                             }
 
                             controlBar.attach(ctx, view, speedCtl)
+
+                            val playPauseId = ctx.resources.getIdentifier("exo_play_pause", "id", ctx.packageName)
+                            view.findViewById<View>(playPauseId)?.setOnClickListener {
+                                if (AppSettings.wifiOnlyPlayback && isPausedByWifi() && !AppSettings.isWifiConnected(ctx)) {
+                                    onMobileResumePlayRequested()
+                                } else {
+                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                }
+                            }
 
                             view.setControllerVisibilityListener(object : PlayerView.ControllerVisibilityListener {
                                 override fun onVisibilityChanged(visibility: Int) {

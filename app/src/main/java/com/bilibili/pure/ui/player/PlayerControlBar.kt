@@ -15,16 +15,16 @@ import androidx.media3.ui.PlayerView
 class PlayerControlBar(
     private val onQualitySelected: (QualityOption) -> Unit
 ) {
-    private var ctx: Context? = null
-    private var controlsRow: ViewGroup? = null
     private var speedCtl: SpeedController? = null
+
+    private var speedButton: TextView? = null
+    private var qualityButton: TextView? = null
 
     private var currentSpeed = 1.0f
     private var currentQuality: QualityOption? = null
     private var availableQualities: List<QualityOption> = emptyList()
 
     fun attach(ctx: Context, playerView: PlayerView, speedCtl: SpeedController) {
-        this.ctx = ctx
         this.speedCtl = speedCtl
 
         val settingsId = ctx.resources.getIdentifier("exo_settings", "id", ctx.packageName)
@@ -32,10 +32,17 @@ class PlayerControlBar(
 
         val settingsView = playerView.findViewById<View>(settingsId)
         val row = settingsView?.parent as? ViewGroup ?: return
-        controlsRow = row
 
-        if (row.findViewWithTag<View>("speed_button") == null) {
-            row.addView(createSpeedButton(ctx), 0)
+        // Create buttons exactly once and hold references. Media3 may move them
+        // into the overflow area on narrow layouts; references stay valid so we
+        // never re-create (which was the source of duplicate buttons).
+        // Insert at index 0: speed first, then quality (pushes speed right),
+        // yielding visible order: 画质, 倍数, 设置, 全屏.
+        if (speedButton == null) {
+            speedButton = createSpeedButton(ctx).also { row.addView(it, 0) }
+        }
+        if (qualityButton == null) {
+            qualityButton = createQualityButton(ctx).also { row.addView(it, 0) }
         }
     }
 
@@ -44,14 +51,11 @@ class PlayerControlBar(
         currentQuality = newQuality
         availableQualities = newQualities
 
-        val row = controlsRow ?: return
+        speedButton?.text = "%.1fx".format(currentSpeed)
 
-        row.findViewWithTag<TextView>("speed_button")?.text = "%.1fx".format(currentSpeed)
-
-        if (newQualities.size > 1 && row.findViewWithTag<View>("quality_button") == null) {
-            ctx?.let { row.addView(createQualityButton(it), 0) }
-        }
-        row.findViewWithTag<TextView>("quality_button")?.text = currentQuality?.description ?: "画质"
+        val qb = qualityButton ?: return
+        qb.visibility = if (newQualities.size > 1) View.VISIBLE else View.GONE
+        qb.text = currentQuality?.description ?: "画质"
     }
 
     private fun createSpeedButton(ctx: Context): TextView {
@@ -60,7 +64,6 @@ class PlayerControlBar(
         val btnMargin = (2 * density).toInt()
 
         return TextView(ctx).apply {
-            tag = "speed_button"
             text = "1.0x"
             setTextColor(android.graphics.Color.WHITE)
             textSize = 13f
@@ -99,7 +102,6 @@ class PlayerControlBar(
         val btnMargin = (2 * density).toInt()
 
         return TextView(ctx).apply {
-            tag = "quality_button"
             text = currentQuality?.description ?: "画质"
             setTextColor(android.graphics.Color.WHITE)
             textSize = 13f

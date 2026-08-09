@@ -14,14 +14,20 @@ object AppSettings {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_WIFI_ONLY_PLAYBACK)) {
+            prefs.edit().putBoolean(KEY_WIFI_ONLY_PLAYBACK, true).apply()
+        }
+        if (!prefs.contains(KEY_WIFI_ONLY_DOWNLOAD)) {
+            prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, true).apply()
+        }
     }
 
     var wifiOnlyPlayback: Boolean
-        get() = prefs.getBoolean(KEY_WIFI_ONLY_PLAYBACK, false)
+        get() = prefs.getBoolean(KEY_WIFI_ONLY_PLAYBACK, true)
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY_PLAYBACK, value).apply()
 
     var wifiOnlyDownload: Boolean
-        get() = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOAD, false)
+        get() = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOAD, true)
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, value).apply()
 
     fun isWifiConnected(context: Context): Boolean {

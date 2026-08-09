@@ -7,7 +7,13 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.local.WifiMonitor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class BilibiliApp : Application(), ImageLoaderFactory {
@@ -29,6 +35,12 @@ class BilibiliApp : Application(), ImageLoaderFactory {
             Log.d(TAG, "Restored login session for UID=$dedeUserId")
         }
         Log.d(TAG, "App started")
+        WifiMonitor.start(this)
+        appScope.launch {
+            WifiMonitor.wifiLost.collect {
+                DownloadManager.getInstance(this@BilibiliApp).pauseForWifi()
+            }
+        }
     }
 
     override fun newImageLoader(): ImageLoader {
@@ -54,4 +66,6 @@ class BilibiliApp : Application(), ImageLoaderFactory {
         lateinit var instance: BilibiliApp
             private set
     }
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 }
