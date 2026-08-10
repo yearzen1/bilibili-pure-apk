@@ -6,3 +6,6 @@
 }
 
 -keep class com.bilibili.pure.data.model.** { *; }
+
+-keep class io.noties.markwon.** { *; }
+-keep class dev.jeziellago.compose.markdowntext.** { *; }

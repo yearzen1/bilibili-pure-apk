@@ -12,7 +12,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.7.0"
     }
 
     buildTypes {
@@ -81,6 +81,8 @@ dependencies {
     implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
 
     implementation("com.google.zxing:core:3.5.3")
+
+    implementation("com.github.jeziellago:compose-markdown:0.5.7")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
