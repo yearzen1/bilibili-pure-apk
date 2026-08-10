@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -236,19 +237,23 @@ internal fun ChannelContent(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = spaceAccInfo.name,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = spaceAccInfo.name,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                             if (spaceAccInfo.sign.isNotBlank()) {
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = spaceAccInfo.sign,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                SelectionContainer {
+                                    Text(
+                                        text = spaceAccInfo.sign,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                         if (isLoggedIn) {

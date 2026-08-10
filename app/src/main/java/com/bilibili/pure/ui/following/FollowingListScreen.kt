@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -198,21 +199,25 @@ private fun FollowingCard(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.uname,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (item.sign.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                SelectionContainer {
                     Text(
-                        text = item.sign,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        text = item.uname,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+                if (item.sign.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    SelectionContainer {
+                        Text(
+                            text = item.sign,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))

@@ -12,12 +12,15 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.animation.core.SnapSpec
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Share
@@ -33,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Size
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.ui.search.formatCount
 import java.text.SimpleDateFormat
@@ -40,6 +45,10 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
+import me.saket.telephoto.zoomable.ZoomSpec
+import me.saket.telephoto.zoomable.rememberZoomableState
+import me.saket.telephoto.zoomable.zoomable
 
 import android.content.Intent
 import android.widget.Toast
@@ -59,6 +68,8 @@ private fun fixPic(url: String): String = when {
     url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
     else -> url
 }
+
+private fun fullResPic(url: String): String = fixPic(url).substringBefore("@")
 
 private fun formatTimestamp(unixSeconds: Long): String {
     val now = System.currentTimeMillis() / 1000
@@ -377,10 +388,12 @@ private fun DetailContent(
                 }
 
                 item {
-                    Text(
-                        text = videoInfo.title,
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = videoInfo.title,
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                    }
                 }
 
                 item {
@@ -398,10 +411,12 @@ private fun DetailContent(
                                 contentScale = ContentScale.Crop
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = videoInfo.owner.name,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = videoInfo.owner.name,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                         if (isLoggedIn) {
                             TextButton(
@@ -448,14 +463,16 @@ private fun DetailContent(
                     var isTruncated by remember { mutableStateOf(false) }
 
                     Column {
-                        Text(
-                            text = videoInfo.desc,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = if (expanded) Int.MAX_VALUE else 3,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = videoInfo.desc,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { if (!expanded) isTruncated = it.hasVisualOverflow }
+                            )
+                        }
                         if (isTruncated) {
                             TextButton(onClick = { expanded = !expanded }) {
                                 Text(if (expanded) "收起" else "展开全部")
@@ -657,10 +674,12 @@ private fun CommentCard(
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = comment.content.message,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = comment.content.message,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     comment.content.pictures?.let { pictures ->
                         CommentPicturesRow(pictures = pictures)
                     }
@@ -708,10 +727,12 @@ private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem, onUserClic
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                text = reply.content.message,
-                style = MaterialTheme.typography.bodySmall
-            )
+            SelectionContainer {
+                Text(
+                    text = reply.content.message,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             reply.content.pictures?.let { pictures ->
                 CommentPicturesRow(pictures = pictures)
             }
@@ -767,42 +788,162 @@ private fun CommentImageViewer(
 ) {
     Dialog(
         onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        var showActions by remember { mutableStateOf(false) }
+        var currentScale by remember { mutableStateOf(1f) }
         val pagerState = rememberPagerState(
             initialPage = initialIndex,
             pageCount = { pictures.size }
         )
 
+        LaunchedEffect(pagerState.currentPage) {
+            currentScale = 1f
+        }
+
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f))) {
             HorizontalPager(
                 state = pagerState,
+                userScrollEnabled = currentScale <= 1.01f,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = fixPic(pictures[page].imgSrc),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(),
-                        contentScale = ContentScale.Fit
-                    )
-                }
+                ZoomableImage(
+                    model = fullResPic(pictures[page].imgSrc),
+                    contentDescription = null,
+                    onTap = {
+                        if (showActions) showActions = false else onClose()
+                    },
+                    onLongPress = { showActions = true },
+                    onScaleChanged = { currentScale = it }
+                )
             }
 
-            Text(
-                text = "${pagerState.currentPage + 1} / ${pictures.size}",
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
+                    .padding(bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (showActions) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        ViewerActionButton(
+                            icon = Icons.Outlined.FileDownload,
+                            label = "保存",
+                            onClick = {
+                                showActions = false
+                                scope.launch {
+                                    CommentImageActions.saveToGallery(context, fullResPic(pictures[pagerState.currentPage].imgSrc))
+                                }
+                            }
+                        )
+                        ViewerActionButton(
+                            icon = Icons.Outlined.ContentCopy,
+                            label = "复制",
+                            onClick = {
+                                showActions = false
+                                scope.launch {
+                                    CommentImageActions.copyToClipboard(context, fullResPic(pictures[pagerState.currentPage].imgSrc))
+                                }
+                            }
+                        )
+                    }
+                }
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${pictures.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomableImage(
+    model: Any?,
+    contentDescription: String?,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+    onScaleChanged: (Float) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val request = remember(model) {
+        ImageRequest.Builder(context)
+            .data(model)
+            // 解码原分辨率,放大时清晰(同微信)
+            .size(Size.ORIGINAL)
+            .build()
+    }
+    // telephoto:捏合缩放/双击切换/拖动/单击/长按全部内置,并自动把未缩放时的
+    // 横滑让位给外层 HorizontalPager 翻页、放大后拖动归自己
+    val zoomState = rememberZoomableState(
+        zoomSpec = ZoomSpec(maxZoomFactor = 3f)
+    )
+
+    LaunchedEffect(model) {
+        zoomState.resetZoom(SnapSpec())
+    }
+
+    // zoomFraction:0=完全缩小(未放大),>0=已放大。用于驱动外层 Pager 的翻页开关
+    LaunchedEffect(zoomState) {
+        snapshotFlow { zoomState.zoomFraction }
+            .collect { fraction -> onScaleChanged(fraction ?: 0f) }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .zoomable(
+                state = zoomState,
+                onClick = { onTap() },
+                onLongClick = { onLongPress() },
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        AsyncImage(
+            model = request,
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
+    }
+}
+
+@Composable
+private fun ViewerActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(24.dp)
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = Color.Black.copy(alpha = 0.4f),
+        contentColor = Color.White
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge
             )
         }
     }

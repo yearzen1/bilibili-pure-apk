@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -86,6 +87,28 @@ fun PlayerScreen(
         DefaultDataSource.Factory(context, networkFactory)
     }
 
+    val buildMediaSource: (PlayerUiState) -> MediaSource = { st ->
+        val dashVideo = st.dashVideo
+        if (st.isDash && dashVideo != null) {
+            val videoMediaItem = MediaItem.fromUri(dashVideo.getUrl())
+            val audioMediaItem = st.dashAudio?.let { MediaItem.fromUri(it.getUrl()) }
+            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(videoMediaItem)
+            val audioSource = audioMediaItem?.let {
+                ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(it)
+            }
+            if (audioSource != null) {
+                androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
+            } else {
+                videoSource
+            }
+        } else {
+            ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(st.videoUrl ?: ""))
+        }
+    }
+
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
             playWhenReady = true
@@ -137,7 +160,7 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         WifiMonitor.wifiLost.collect {
-            if (AppSettings.wifiOnlyPlayback && localFilePath.isNullOrBlank() && player.isPlaying) {
+            if (AppSettings.wifiOnlyPlayback && localFilePath.isNullOrBlank() && player.playWhenReady) {
                 pausedByWifi.value = true
                 player.pause()
                 android.widget.Toast.makeText(context, "WiFi已断开，播放已暂停", android.widget.Toast.LENGTH_SHORT).show()
@@ -148,7 +171,11 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         WifiMonitor.wifiRestored.collect {
             if (pausedByWifi.value) {
+                val seekMs = player.currentPosition.coerceAtLeast(0)
                 pausedByWifi.value = false
+                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: wifi restored, reloading at ${seekMs}ms")
+                player.setMediaSource(buildMediaSource(vm.uiState.value), seekMs)
+                player.prepare()
                 player.play()
                 android.widget.Toast.makeText(context, "WiFi已恢复，继续播放", android.widget.Toast.LENGTH_SHORT).show()
             }
@@ -194,33 +221,7 @@ fun PlayerScreen(
                 player.currentPosition
             }
 
-            val mediaSource: MediaSource = if (uiState.isDash) {
-                val dashVideo = uiState.dashVideo
-                val dashAudio = uiState.dashAudio
-                if (dashVideo != null) {
-                    val videoMediaItem = MediaItem.fromUri(dashVideo.getUrl())
-                    val audioMediaItem = dashAudio?.let { MediaItem.fromUri(it.getUrl()) }
-
-                    val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(videoMediaItem)
-                    val audioSource = audioMediaItem?.let {
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(it)
-                    }
-
-                    if (audioSource != null) {
-                        androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
-                    } else {
-                        videoSource
-                    }
-                } else {
-                    ProgressiveMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(MediaItem.fromUri(url))
-                }
-            } else {
-                ProgressiveMediaSource.Factory(dataSourceFactory)
-                    .createMediaSource(MediaItem.fromUri(url))
-            }
+            val mediaSource: MediaSource = buildMediaSource(uiState)
 
             player.setMediaSource(mediaSource)
             player.prepare()
@@ -310,12 +311,14 @@ fun PlayerScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = if (uiState.pages.size > 1) "${uiState.title} (${uiState.currentPage?.page ?: 1}/${uiState.pages.size})"
-                                   else if (uiState.title.isNotEmpty()) uiState.title
-                                   else "播放",
-                            maxLines = 1
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = if (uiState.pages.size > 1) "${uiState.title} (${uiState.currentPage?.page ?: 1}/${uiState.pages.size})"
+                                       else if (uiState.title.isNotEmpty()) uiState.title
+                                       else "播放",
+                                maxLines = 1
+                            )
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = {
