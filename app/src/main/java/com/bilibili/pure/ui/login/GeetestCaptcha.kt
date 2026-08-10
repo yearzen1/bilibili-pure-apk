@@ -5,15 +5,21 @@ import android.graphics.Bitmap
 import android.util.Log
 import android.webkit.JsPromptResult
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.json.JSONObject
 
 data class GeetestResult(
@@ -24,7 +30,6 @@ data class GeetestResult(
 
 private const val TAG = "BiliPure"
 
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun GeetestCaptcha(
@@ -33,29 +38,38 @@ fun GeetestCaptcha(
     onResult: (GeetestResult) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var resultHandled by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 32.dp)
         ) {
-            Text(
-                text = "请完成验证",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "请完成验证",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "关闭")
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
+                    .weight(1f)
             ) {
                 AndroidView(
                     factory = { ctx ->
@@ -126,8 +140,11 @@ fun GeetestCaptcha(
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     Log.d(TAG, "Geetest page finished: $url")
                                 }
-                                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
-                                    Log.e(TAG, "Geetest WebView error: code=$errorCode desc=$description url=$failingUrl")
+                                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                                    val code = error?.errorCode ?: 0
+                                    val desc = error?.description?.toString() ?: "unknown"
+                                    val failingUrl = request?.url?.toString() ?: "unknown"
+                                    Log.e(TAG, "Geetest WebView error: code=$code desc=$desc url=$failingUrl")
                                 }
                             }
 
@@ -201,6 +218,7 @@ fun GeetestCaptcha(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
         }
     }
 }
