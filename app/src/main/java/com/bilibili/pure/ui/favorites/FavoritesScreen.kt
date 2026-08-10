@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.FavResourceItem
+import com.bilibili.pure.ui.common.DismissSelectionCard
 import com.bilibili.pure.ui.search.formatCount
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -299,10 +300,9 @@ private fun ResourceListView(
 
 @Composable
 private fun ResourceCard(item: FavResourceItem, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    DismissSelectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(8.dp)) {

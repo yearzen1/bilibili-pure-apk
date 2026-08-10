@@ -1,6 +1,5 @@
 package com.bilibili.pure.ui.following
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FollowingItem
+import com.bilibili.pure.ui.common.DismissSelectionCard
 import kotlinx.coroutines.delay
 
 private fun fixPic(url: String): String = when {
@@ -180,10 +180,9 @@ private fun FollowingCard(
     onClick: () -> Unit,
     onUnfollow: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+    DismissSelectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.SearchVideoItem
+import com.bilibili.pure.ui.common.DismissSelectionCard
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -350,10 +351,9 @@ fun SearchVideoCard(
         else -> video.pic
     }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    DismissSelectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(8.dp)) {

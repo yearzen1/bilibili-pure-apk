@@ -1,6 +1,5 @@
 package com.bilibili.pure.ui.history
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.HistoryItem
+import com.bilibili.pure.ui.common.DismissSelectionCard
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -194,10 +194,9 @@ private fun HistoryCard(
         (item.progress.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    DismissSelectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(8.dp)) {

@@ -39,6 +39,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Size
 import com.bilibili.pure.data.model.VideoInfo
+import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.ui.common.DismissSelectionClickable
 import com.bilibili.pure.ui.search.formatCount
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -398,12 +400,14 @@ private fun DetailContent(
 
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onUploaderClick(videoInfo.owner.mid) },
-                            verticalAlignment = Alignment.CenterVertically
+                        DismissSelectionClickable(
+                            modifier = Modifier.weight(1f),
+                            onClick = { onUploaderClick(videoInfo.owner.mid) }
                         ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                             AsyncImage(
                                 model = fixPic(videoInfo.owner.face),
                                 contentDescription = videoInfo.owner.name,
@@ -416,6 +420,7 @@ private fun DetailContent(
                                     text = videoInfo.owner.name,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
+                            }
                             }
                         }
                         if (isLoggedIn) {
@@ -641,10 +646,9 @@ private fun CommentCard(
     onToggle: () -> Unit,
     onUserClick: (mid: Long) -> Unit = {}
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (comment.rcount > 0) Modifier.clickable { onToggle() } else Modifier),
+    DismissSelectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = if (comment.rcount > 0) ({ onToggle() }) else null,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
