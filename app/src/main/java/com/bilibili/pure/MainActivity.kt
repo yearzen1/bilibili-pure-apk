@@ -1,8 +1,14 @@
 package com.bilibili.pure
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
@@ -16,6 +22,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.channel.ChannelSearchScreen
 import com.bilibili.pure.ui.detail.DetailScreen
@@ -34,22 +43,72 @@ import com.bilibili.pure.ui.settings.SettingsScreen
 import com.bilibili.pure.ui.theme.BilibiliPureTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private val openDownloadsRequest = MutableStateFlow(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestNotificationPermissionIfNeeded()
+        handleOpenDownloadsIntent(intent)
         setContent {
             BilibiliPureTheme {
-                MainScreen()
+                MainScreen(openDownloadsRequest)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOpenDownloadsIntent(intent)
+    }
+
+    private fun handleOpenDownloadsIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_DOWNLOADS, false) == true) {
+            openDownloadsRequest.value++
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_DOWNLOADS = "open_downloads"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    openDownloadsRequest: StateFlow<Int> = MutableStateFlow(0)
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    val openDownloadsTrigger by openDownloadsRequest.collectAsState()
+    var handledOpenDownloads by remember { mutableStateOf(0) }
+    LaunchedEffect(openDownloadsTrigger) {
+        if (openDownloadsTrigger != handledOpenDownloads) {
+            handledOpenDownloads = openDownloadsTrigger
+            navController.navigate(Routes.DOWNLOADS) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     val showBottomBar = currentDestination?.route in listOf(
         Screen.Search.route,

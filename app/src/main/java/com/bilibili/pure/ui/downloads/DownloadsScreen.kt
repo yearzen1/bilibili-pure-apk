@@ -187,8 +187,13 @@ private fun DownloadItem(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (download.status == DownloadInfo.STATUS_DOWNLOADING && download.speed > 0) {
+                            val remaining = remainingText(download)
                             Text(
-                                text = formatSpeed(download.speed),
+                                text = if (remaining != null) {
+                                    "${formatSpeed(download.speed)} · $remaining"
+                                } else {
+                                    formatSpeed(download.speed)
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -306,4 +311,10 @@ private fun formatSpeed(bytesPerSecond: Long): String {
         bytesPerSecond < 1024 * 1024 -> "%.1fKB/s".format(bytesPerSecond / 1024.0)
         else -> "%.1fMB/s".format(bytesPerSecond / (1024.0 * 1024))
     }
+}
+
+private fun remainingText(download: DownloadInfo): String? {
+    if (download.speed <= 0 || download.totalSize <= download.fileSize) return null
+    val seconds = (download.totalSize - download.fileSize) / download.speed
+    return com.bilibili.pure.data.download.DownloadNotificationHelper.formatRemaining(seconds)
 }

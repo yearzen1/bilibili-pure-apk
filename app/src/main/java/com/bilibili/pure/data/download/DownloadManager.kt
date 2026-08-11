@@ -1,7 +1,9 @@
 package com.bilibili.pure.data.download
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
@@ -130,10 +132,15 @@ class DownloadManager(private val context: Context) {
         saveDownloads(downloads)
         onStatusChanged?.invoke(id, DownloadInfo.STATUS_PENDING)
 
+        startForegroundService()
         val job = scope.launch {
             downloadFile(info, url)
         }
         activeJobs[id] = job
+    }
+
+    private fun startForegroundService() {
+        ContextCompat.startForegroundService(context, Intent(context, DownloadService::class.java))
     }
 
     private suspend fun downloadFile(info: DownloadInfo, url: String) {
@@ -209,8 +216,6 @@ class DownloadManager(private val context: Context) {
                                     lastSpeedBytes = currentSize
                                     onProgressChanged?.invoke(info.id, currentSize, totalSize, speed)
                                     updateDownload(info.id) { it.copy(fileSize = currentSize, speed = speed) }
-                                } else {
-                                    onProgressChanged?.invoke(info.id, currentSize, totalSize, 0)
                                 }
                             }
 
@@ -279,6 +284,7 @@ class DownloadManager(private val context: Context) {
         if (download.status != DownloadInfo.STATUS_PAUSED && download.status != DownloadInfo.STATUS_FAILED) return
 
         val url = getDownloadUrl(download) ?: return
+        startForegroundService()
         val job = scope.launch {
             downloadFile(download, url)
         }
