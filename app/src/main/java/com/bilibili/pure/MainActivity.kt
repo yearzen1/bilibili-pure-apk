@@ -233,7 +233,7 @@ fun MainScreen(
                 DownloadsScreen(
                     onBack = { navController.popBackStack() },
                     onPlay = { filePath ->
-                        navController.navigate("local/${java.net.URLEncoder.encode(filePath, "UTF-8")}")
+                        navController.navigate("local/${android.net.Uri.encode(filePath)}")
                     }
                 )
             }
@@ -248,9 +248,7 @@ fun MainScreen(
                 route = Routes.LOCAL_PLAYER,
                 arguments = listOf(navArgument("filePath") { type = NavType.StringType })
             ) { backStackEntry ->
-                val filePath = backStackEntry.arguments?.getString("filePath")?.let {
-                    java.net.URLDecoder.decode(it, "UTF-8")
-                } ?: return@composable
+                val filePath = backStackEntry.arguments?.getString("filePath") ?: return@composable
                 PlayerScreen(
                     bvid = "",
                     onBack = { navController.popBackStack() },
