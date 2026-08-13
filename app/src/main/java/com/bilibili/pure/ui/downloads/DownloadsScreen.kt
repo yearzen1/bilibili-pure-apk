@@ -1,6 +1,5 @@
 package com.bilibili.pure.ui.downloads
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.model.DownloadInfo
+import com.bilibili.pure.ui.common.DismissSelectionCard
 
 private fun fixPic(url: String): String = when {
     url.startsWith("//") -> "https:$url"
@@ -34,6 +34,7 @@ private fun fixPic(url: String): String = when {
 fun DownloadsScreen(
     onBack: () -> Unit,
     onPlay: (filePath: String) -> Unit,
+    onDetail: (bvid: String) -> Unit,
     viewModel: DownloadsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val downloads by viewModel.downloads.collectAsState()
@@ -96,6 +97,7 @@ fun DownloadsScreen(
                     DownloadItem(
                         download = download,
                         onPlay = { onPlay(download.filePath) },
+                        onDetail = { onDetail(download.bvid) },
                         onDelete = { viewModel.deleteDownload(download) },
                         onPause = { viewModel.pauseDownload(download) },
                         onResume = {
@@ -137,14 +139,16 @@ fun DownloadsScreen(
 private fun DownloadItem(
     download: DownloadInfo,
     onPlay: () -> Unit,
+    onDetail: () -> Unit,
     onDelete: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    Card(
+    DismissSelectionCard(
         modifier = Modifier.fillMaxWidth(),
+        onClick = onDetail,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -155,9 +159,7 @@ private fun DownloadItem(
                 AsyncImage(
                     model = fixPic(download.cover),
                     contentDescription = download.title,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clickable(onClick = onPlay),
+                    modifier = Modifier.size(80.dp),
                     contentScale = ContentScale.Crop
                 )
 

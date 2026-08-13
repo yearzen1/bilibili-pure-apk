@@ -234,6 +234,9 @@ fun MainScreen(
                     onBack = { navController.popBackStack() },
                     onPlay = { filePath ->
                         navController.navigate("local/${android.net.Uri.encode(filePath)}")
+                    },
+                    onDetail = { bvid ->
+                        navController.navigate(Routes.detail(bvid))
                     }
                 )
             }
