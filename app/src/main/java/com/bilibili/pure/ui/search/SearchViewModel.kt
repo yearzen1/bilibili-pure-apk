@@ -7,6 +7,7 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.local.SearchHistoryManager
 import com.bilibili.pure.data.model.SearchVideoItem
 import com.bilibili.pure.data.repository.BilibiliRepository
+import com.bilibili.pure.util.cleanHtmlText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,7 +95,12 @@ class SearchViewModel(
                 .onSuccess { (results, totalPages) ->
                     Log.d(BilibiliApp.TAG, "search success: ${results.size} results, pages=$totalPages")
                     _uiState.value = _uiState.value.copy(
-                        results = results.distinctBy { it.bvid }.filter { it.bvid.isNotBlank() },
+                        results = results.distinctBy { it.bvid }.filter { it.bvid.isNotBlank() }
+                            .map { it.copy(
+                                title = cleanHtmlText(it.title),
+                                author = cleanHtmlText(it.author),
+                                description = cleanHtmlText(it.description)
+                            ) },
                         isLoading = false,
                         currentPage = 1,
                         hasMore = totalPages > 1
@@ -139,6 +145,11 @@ class SearchViewModel(
                 .onSuccess { (results, totalPages) ->
                     val existingBvids = _uiState.value.results.map { it.bvid }.toSet()
                     val deduped = results.filter { it.bvid !in existingBvids && it.bvid.isNotBlank() }
+                        .map { it.copy(
+                            title = cleanHtmlText(it.title),
+                            author = cleanHtmlText(it.author),
+                            description = cleanHtmlText(it.description)
+                        ) }
                     _uiState.value = _uiState.value.copy(
                         results = _uiState.value.results + deduped,
                         isLoadingMore = false,

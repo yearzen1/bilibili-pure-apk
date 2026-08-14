@@ -161,7 +161,7 @@ fun SearchScreen(
             }
         }
 
-        if (uiState.results.isNotEmpty()) {
+        if (uiState.query.isNotEmpty()) {
             SortSelector(
                 selected = uiState.sortBy,
                 onSelect = { viewModel.setSortBy(it) }
@@ -370,7 +370,7 @@ fun SearchVideoCard(
             Column(modifier = Modifier.weight(1f)) {
                 SelectionContainer {
                     Text(
-                        text = video.title.replace(Regex("<[^>]*>"), ""),
+                        text = video.title,
                         style = MaterialTheme.typography.bodyLarge,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

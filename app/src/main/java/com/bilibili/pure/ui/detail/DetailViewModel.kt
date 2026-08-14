@@ -8,6 +8,7 @@ import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentItem
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
+import com.bilibili.pure.util.decodeHtmlEntities
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -182,7 +183,9 @@ class DetailViewModel(
         Log.d(BilibiliApp.TAG, "load comments: aid=$aid")
         repository.getComments(aid)
             .onSuccess { commentList ->
-                val replies = commentList.replies ?: emptyList()
+                val replies = (commentList.replies ?: emptyList()).map { c ->
+                    c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                }
                 val cursor = commentList.cursor
                 Log.d(BilibiliApp.TAG, "comments loaded: ${replies.size} comments, cursor=${cursor}")
                 _uiState.value = _uiState.value.copy(
@@ -201,7 +204,9 @@ class DetailViewModel(
             _uiState.value = state.copy(loadingMore = true)
             repository.getComments(aid, page = state.nextCursor)
                 .onSuccess { commentList ->
-                    val newReplies = commentList.replies ?: emptyList()
+                    val newReplies = (commentList.replies ?: emptyList()).map { c ->
+                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                    }
                     val cursor = commentList.cursor
                     Log.d(BilibiliApp.TAG, "more comments loaded: ${newReplies.size} comments, cursor=${cursor}")
                     _uiState.value = _uiState.value.copy(
@@ -238,7 +243,9 @@ class DetailViewModel(
             )
             repository.getReplies(aid, rpid, page = 1)
                 .onSuccess { commentList ->
-                    val items = commentList.replies ?: emptyList()
+                    val items = (commentList.replies ?: emptyList()).map { c ->
+                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                    }
                     _uiState.value = _uiState.value.copy(
                         replyThreads = _uiState.value.replyThreads + (rpid to ReplyThread(
                             items = items,
@@ -266,7 +273,9 @@ class DetailViewModel(
             val nextPage = thread.currentPage + 1
             repository.getReplies(aid, rpid, page = nextPage)
                 .onSuccess { commentList ->
-                    val newItems = commentList.replies ?: emptyList()
+                    val newItems = (commentList.replies ?: emptyList()).map { c ->
+                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                    }
                     val cursor = commentList.cursor
                     val updated = thread.copy(
                         items = thread.items + newItems,
