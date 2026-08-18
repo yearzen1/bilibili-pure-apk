@@ -73,7 +73,8 @@ data class VideoPage(
 
 data class CommentList(
     val replies: List<CommentItem>?,
-    val cursor: CommentCursor? = null
+    val cursor: CommentCursor? = null,
+    @SerializedName("top_replies") val topReplies: List<CommentItem>? = null
 )
 
 data class CommentItem(
@@ -82,7 +83,8 @@ data class CommentItem(
     val member: CommentMember,
     val like: Int = 0,
     val rcount: Int = 0,
-    val ctime: Long = 0
+    val ctime: Long = 0,
+    val action: Int = 0
 )
 
 data class CommentContent(

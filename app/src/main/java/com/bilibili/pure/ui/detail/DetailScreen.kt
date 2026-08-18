@@ -20,10 +20,12 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -183,6 +185,12 @@ fun DetailScreen(
             loadingMore = uiState.loadingMore,
             hasMoreComments = uiState.hasMoreComments,
             onLoadMoreComments = { uiState.videoInfo?.let { viewModel.loadMoreComments(it.aid) } },
+            pinnedComments = uiState.pinnedComments,
+            commentSortMode = uiState.commentSortMode,
+            loadingComments = uiState.loadingComments,
+            onSortComments = { mode -> uiState.videoInfo?.let { viewModel.setCommentSort(it.aid, mode) } },
+            togglingLikes = uiState.togglingLikes,
+            onToggleCommentLike = { rpid -> uiState.videoInfo?.let { viewModel.toggleCommentLike(it.aid, rpid) } },
             isFavorited = uiState.isFavorited,
             favoriteCount = uiState.favoriteCount,
             isTogglingFavorite = uiState.isTogglingFavorite,
@@ -331,6 +339,12 @@ private fun DetailContent(
     loadingMore: Boolean = false,
     hasMoreComments: Boolean = true,
     onLoadMoreComments: () -> Unit = {},
+    pinnedComments: List<com.bilibili.pure.data.model.CommentItem> = emptyList(),
+    commentSortMode: Int = 3,
+    loadingComments: Boolean = false,
+    onSortComments: (Int) -> Unit = {},
+    togglingLikes: Set<Long> = emptySet(),
+    onToggleCommentLike: (rpid: Long) -> Unit = {},
     isFavorited: Boolean = false,
     favoriteCount: Long = 0,
     isTogglingFavorite: Boolean = false,
@@ -538,10 +552,84 @@ private fun DetailContent(
                 }
 
                 item(key = "comments_header") {
-                    Text(
-                        text = "评论 (${videoInfo.stat.reply})",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Column {
+                        Text(
+                            text = "评论 (${videoInfo.stat.reply})",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = commentSortMode == 3,
+                                onClick = { onSortComments(3) },
+                                label = { Text("热门") }
+                            )
+                            FilterChip(
+                                selected = commentSortMode == 2,
+                                onClick = { onSortComments(2) },
+                                label = { Text("最新") }
+                            )
+                        }
+                    }
+                }
+
+                if (loadingComments) {
+                    item(key = "comments_loading") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(Modifier.size(24.dp))
+                        }
+                    }
+                }
+
+                if (pinnedComments.isNotEmpty()) {
+                    pinnedComments.forEach { comment ->
+                        val rpid = comment.rpid
+                        val thread = replyThreads[rpid]
+                        val isExpanded = rpid in expandedReplies
+                        item(key = "pinned_$rpid") {
+                            CommentCard(
+                                comment = comment,
+                                thread = thread,
+                                isExpanded = isExpanded,
+                                isPinned = true,
+                                isLiked = comment.action == 1,
+                                isTogglingLike = comment.rpid in togglingLikes,
+                                onToggle = { onToggleReplies(rpid) },
+                                onUserClick = onUserClick,
+                                onToggleLike = {
+                                    if (isLoggedIn) onToggleCommentLike(comment.rpid)
+                                    else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                        if (isExpanded && thread != null) {
+                            thread.items.forEach { reply ->
+                                item(key = "pinned_r_$rpid:${reply.rpid}") {
+                                    ReplyRow(
+                                        reply = reply,
+                                        onUserClick = onUserClick,
+                                        isLiked = reply.action == 1,
+                                        isTogglingLike = reply.rpid in togglingLikes,
+                                        onToggleLike = {
+                                            if (isLoggedIn) onToggleCommentLike(reply.rpid)
+                                            else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            }
+                            item(key = "pinned_collapse_$rpid") {
+                                TextButton(
+                                    onClick = { onToggleReplies(rpid) },
+                                    modifier = Modifier.padding(start = 32.dp)
+                                ) {
+                                    Text("收起回复")
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (comments != null) {
@@ -555,15 +643,31 @@ private fun DetailContent(
                                 comment = comment,
                                 thread = thread,
                                 isExpanded = isExpanded,
+                                isPinned = false,
+                                isLiked = comment.action == 1,
+                                isTogglingLike = comment.rpid in togglingLikes,
                                 onToggle = { onToggleReplies(rpid) },
-                                onUserClick = onUserClick
+                                onUserClick = onUserClick,
+                                onToggleLike = {
+                                    if (isLoggedIn) onToggleCommentLike(comment.rpid)
+                                    else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
+                                }
                             )
                         }
 
                         if (isExpanded && thread != null) {
                             thread.items.forEach { reply ->
                                 item(key = "r_$rpid:${reply.rpid}") {
-                                    ReplyRow(reply = reply, onUserClick = onUserClick)
+                                    ReplyRow(
+                                        reply = reply,
+                                        onUserClick = onUserClick,
+                                        isLiked = reply.action == 1,
+                                        isTogglingLike = reply.rpid in togglingLikes,
+                                        onToggleLike = {
+                                            if (isLoggedIn) onToggleCommentLike(reply.rpid)
+                                            else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
                                 }
                             }
                             item(key = "collapse_$rpid") {
@@ -643,8 +747,12 @@ private fun CommentCard(
     comment: com.bilibili.pure.data.model.CommentItem,
     thread: ReplyThread?,
     isExpanded: Boolean,
+    isPinned: Boolean = false,
+    isLiked: Boolean = false,
+    isTogglingLike: Boolean = false,
     onToggle: () -> Unit,
-    onUserClick: (mid: Long) -> Unit = {}
+    onUserClick: (mid: Long) -> Unit = {},
+    onToggleLike: () -> Unit = {}
 ) {
     DismissSelectionCard(
         modifier = Modifier.fillMaxWidth(),
@@ -670,6 +778,20 @@ private fun CommentCard(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.clickable { onUserClick(comment.member.mid) }
                         )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                contentColor = Color.White
+                            ) {
+                                Text(
+                                    text = "置顶",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = formatTimestamp(comment.ctime),
@@ -687,17 +809,29 @@ private fun CommentCard(
                     comment.content.pictures?.let { pictures ->
                         CommentPicturesRow(pictures = pictures)
                     }
-                    if (comment.rcount > 0) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = when {
-                                thread?.isLoading == true -> "加载中..."
-                                thread?.hasMore == false && isExpanded -> "${comment.rcount} 条回复"
-                                isExpanded -> "收起回复"
-                                else -> "${comment.rcount} 条回复"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (comment.rcount > 0) {
+                            Text(
+                                text = when {
+                                    thread?.isLoading == true -> "加载中..."
+                                    thread?.hasMore == false && isExpanded -> "${comment.rcount} 条回复"
+                                    isExpanded -> "收起回复"
+                                    else -> "${comment.rcount} 条回复"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        CommentLikeButton(
+                            liked = isLiked,
+                            likeCount = comment.like,
+                            enabled = !isTogglingLike,
+                            onClick = onToggleLike
                         )
                     }
                 }
@@ -707,7 +841,13 @@ private fun CommentCard(
 }
 
 @Composable
-private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem, onUserClick: (mid: Long) -> Unit = {}) {
+private fun ReplyRow(
+    reply: com.bilibili.pure.data.model.CommentItem,
+    onUserClick: (mid: Long) -> Unit = {},
+    isLiked: Boolean = false,
+    isTogglingLike: Boolean = false,
+    onToggleLike: () -> Unit = {}
+) {
     Row(modifier = Modifier.padding(start = 32.dp)) {
         AsyncImage(
             model = fixPic(reply.member.avatar),
@@ -740,7 +880,47 @@ private fun ReplyRow(reply: com.bilibili.pure.data.model.CommentItem, onUserClic
             reply.content.pictures?.let { pictures ->
                 CommentPicturesRow(pictures = pictures)
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                CommentLikeButton(
+                    liked = isLiked,
+                    likeCount = reply.like,
+                    compact = true,
+                    enabled = !isTogglingLike,
+                    onClick = onToggleLike
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun CommentLikeButton(
+    liked: Boolean,
+    likeCount: Int,
+    enabled: Boolean,
+    compact: Boolean = false,
+    onClick: () -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+    ) {
+        Icon(
+            imageVector = if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+            contentDescription = if (liked) "取消点赞" else "点赞",
+            modifier = Modifier.size(if (compact) 14.dp else 16.dp),
+            tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = formatCount(likeCount.toLong()),
+            style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+            color = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

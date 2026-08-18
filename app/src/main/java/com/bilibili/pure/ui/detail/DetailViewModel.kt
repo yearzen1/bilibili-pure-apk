@@ -26,6 +26,10 @@ data class ReplyThread(
 data class DetailUiState(
     val videoInfo: VideoInfo? = null,
     val comments: List<CommentItem>? = null,
+    val pinnedComments: List<CommentItem> = emptyList(),
+    val commentSortMode: Int = 3,
+    val loadingComments: Boolean = false,
+    val togglingLikes: Set<Long> = emptySet(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val replyThreads: Map<Long, ReplyThread> = emptyMap(),
@@ -179,22 +183,120 @@ class DetailViewModel(
             }
     }
 
-    private suspend fun loadComments(aid: Long) {
-        Log.d(BilibiliApp.TAG, "load comments: aid=$aid")
-        repository.getComments(aid)
+    private suspend fun loadComments(aid: Long, mode: Int = _uiState.value.commentSortMode) {
+        Log.d(BilibiliApp.TAG, "load comments: aid=$aid mode=$mode")
+        _uiState.value = _uiState.value.copy(loadingComments = true)
+        repository.getComments(aid, mode = mode)
             .onSuccess { commentList ->
-                val replies = (commentList.replies ?: emptyList()).map { c ->
+                val pinned = (commentList.topReplies ?: emptyList()).map { c ->
                     c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
                 }
+                val pinnedRpids = pinned.map { it.rpid }.toSet()
+                val replies = (commentList.replies ?: emptyList())
+                    .filter { it.rpid !in pinnedRpids }
+                    .map { c ->
+                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                    }
                 val cursor = commentList.cursor
-                Log.d(BilibiliApp.TAG, "comments loaded: ${replies.size} comments, cursor=${cursor}")
+                Log.d(BilibiliApp.TAG, "comments loaded: ${replies.size} comments, ${pinned.size} pinned, cursor=${cursor}")
                 _uiState.value = _uiState.value.copy(
                     comments = replies,
+                    pinnedComments = pinned,
                     nextCursor = cursor?.next ?: 0,
-                    hasMoreComments = cursor?.isEnd != true
+                    hasMoreComments = cursor?.isEnd != true,
+                    loadingComments = false
                 )
             }
-            .onFailure { Log.e(BilibiliApp.TAG, "load comments failed", it) }
+            .onFailure {
+                Log.e(BilibiliApp.TAG, "load comments failed", it)
+                _uiState.value = _uiState.value.copy(loadingComments = false)
+            }
+    }
+
+    fun setCommentSort(aid: Long, mode: Int) {
+        val state = _uiState.value
+        if (mode == state.commentSortMode) return
+        _uiState.value = state.copy(
+            commentSortMode = mode,
+            comments = null,
+            pinnedComments = emptyList(),
+            nextCursor = 0,
+            hasMoreComments = true,
+            loadingMore = false,
+            loadingComments = true,
+            expandedReplies = emptySet(),
+            replyThreads = emptyMap(),
+            togglingLikes = emptySet()
+        )
+        viewModelScope.launch {
+            loadComments(aid, mode)
+        }
+    }
+
+    fun toggleCommentLike(aid: Long, rpid: Long) {
+        val state = _uiState.value
+        if (rpid in state.togglingLikes) return
+        if (!state.isLoggedIn) return
+        val original = findComment(rpid) ?: return
+        val liked = original.action != 1
+        _uiState.value = applyLike(state, rpid, liked)
+        viewModelScope.launch {
+            repository.likeComment(aid, rpid, liked)
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        togglingLikes = _uiState.value.togglingLikes - rpid
+                    )
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "toggleCommentLike failed", e)
+                    _uiState.value = revertLike(_uiState.value, rpid, original)
+                }
+        }
+    }
+
+    private fun findComment(rpid: Long): CommentItem? {
+        val state = _uiState.value
+        state.pinnedComments.forEach { if (it.rpid == rpid) return it }
+        state.comments?.forEach { if (it.rpid == rpid) return it }
+        state.replyThreads.values.forEach { t ->
+            t.items.forEach { if (it.rpid == rpid) return it }
+        }
+        return null
+    }
+
+    private fun updateCommentLike(items: List<CommentItem>, rpid: Long, liked: Boolean): List<CommentItem> =
+        items.map {
+            if (it.rpid == rpid) {
+                it.copy(
+                    like = maxOf(0, it.like + (if (liked) 1 else -1)),
+                    action = if (liked) 1 else 0
+                )
+            } else it
+        }
+
+    private fun restoreCommentLike(items: List<CommentItem>, original: CommentItem): List<CommentItem> =
+        items.map { if (it.rpid == original.rpid) original else it }
+
+    private fun applyLike(state: DetailUiState, rpid: Long, liked: Boolean): DetailUiState {
+        return state.copy(
+            togglingLikes = state.togglingLikes + rpid,
+            pinnedComments = updateCommentLike(state.pinnedComments, rpid, liked),
+            comments = state.comments?.let { updateCommentLike(it, rpid, liked) },
+            replyThreads = state.replyThreads.mapValues { (_, t) ->
+                t.copy(items = updateCommentLike(t.items, rpid, liked))
+            }
+        )
+    }
+
+    private fun revertLike(state: DetailUiState, rpid: Long, original: CommentItem): DetailUiState {
+        return state.copy(
+            togglingLikes = state.togglingLikes - rpid,
+            pinnedComments = restoreCommentLike(state.pinnedComments, original),
+            comments = state.comments?.let { restoreCommentLike(it, original) },
+            replyThreads = state.replyThreads.mapValues { (_, t) ->
+                t.copy(items = restoreCommentLike(t.items, original))
+            }
+        )
     }
 
     fun loadMoreComments(aid: Long) {
@@ -202,11 +304,14 @@ class DetailViewModel(
         if (state.loadingMore || !state.hasMoreComments) return
         viewModelScope.launch {
             _uiState.value = state.copy(loadingMore = true)
-            repository.getComments(aid, page = state.nextCursor)
+            repository.getComments(aid, page = state.nextCursor, mode = state.commentSortMode)
                 .onSuccess { commentList ->
-                    val newReplies = (commentList.replies ?: emptyList()).map { c ->
-                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
-                    }
+                    val pinnedRpids = _uiState.value.pinnedComments.map { it.rpid }.toSet()
+                    val newReplies = (commentList.replies ?: emptyList())
+                        .filter { it.rpid !in pinnedRpids }
+                        .map { c ->
+                            c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                        }
                     val cursor = commentList.cursor
                     Log.d(BilibiliApp.TAG, "more comments loaded: ${newReplies.size} comments, cursor=${cursor}")
                     _uiState.value = _uiState.value.copy(

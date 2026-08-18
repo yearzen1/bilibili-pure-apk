@@ -229,10 +229,10 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getPlayUrlDash exception", it) }
     }
 
-    suspend fun getComments(aid: Long, page: Int = 0): Result<CommentList> {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getComments: aid=$aid page=$page")
+    suspend fun getComments(aid: Long, page: Int = 0, mode: Int = 3): Result<CommentList> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getComments: aid=$aid page=$page mode=$mode")
         return runCatching {
-            val response = api.getComments(oid = aid, next = page)
+            val response = api.getComments(oid = aid, mode = mode, next = page)
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getComments response: code=${response.code} msg=${response.message}")
             if (response.code == 0) {
                 response.data ?: CommentList(null)
@@ -253,6 +253,27 @@ class BilibiliRepository(
                 throw Exception(response.message)
             }
         }.onFailure { Log.e(BilibiliApp.TAG, "getReplies failed", it) }
+    }
+
+    suspend fun likeComment(aid: Long, rpid: Long, like: Boolean): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "likeComment: aid=$aid rpid=$rpid like=$like")
+        return runCatching {
+            if (BilibiliApi.biliJct.isEmpty()) {
+                throw Exception("请先登录")
+            }
+            val response = api.likeComment(
+                oid = aid,
+                rpid = rpid,
+                action = if (like) 1 else 0,
+                csrf = BilibiliApi.biliJct
+            )
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "likeComment response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                Unit
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "likeComment failed", it) }
     }
 
     suspend fun generateQRCode(): Result<QRLoginData> {

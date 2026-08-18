@@ -55,6 +55,16 @@ interface BilibiliApi {
     ): ApiResponse<CommentList>
 
     @FormUrlEncoded
+    @POST("x/v2/reply/action")
+    suspend fun likeComment(
+        @Field("type") type: Int = 1,
+        @Field("oid") oid: Long,
+        @Field("rpid") rpid: Long,
+        @Field("action") action: Int,
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
+    @FormUrlEncoded
     @POST("x/v2/history/report")
     suspend fun reportProgress(
         @Field("aid") aid: Long,
