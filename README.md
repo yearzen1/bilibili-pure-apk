@@ -1,3 +1,5 @@
+
+
 # Bilibili Pure APK
 
 一个轻量级的第三方 Bilibili Android 客户端，使用 ExoPlayer 原生播放视频，替换官方 WebView 播放方案。
@@ -112,7 +114,7 @@ Bilibili Web 端部分接口（如 `x/space/wbi/arc/search`）需要 WBI 签名�
 
 ### 视频下载
 `DownloadManager` 基于 OkHttp 流式下载渐进式 MP4：
-- 存储到 `context.getExternalFilesDir("downloads")`（应用私有，API 29+ 免权限，卸载即清）
+- 存储到 `context.getExternalFilesDir(null)` 下的 `downloads/` 目录（应用私有，API 29+ 免权限，卸载即清）
 - SharedPreferences 持久化元数据（封面/标题/画质/大小）
 - `DownloadService` 前台服务 + 进度通知，支持暂停/继续/删除
 - 本地文件以 `file://` URI 交给播放器播放
