@@ -54,9 +54,15 @@ import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.rememberZoomableState
 import me.saket.telephoto.zoomable.zoomable
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.local.AppSettings
@@ -986,6 +992,18 @@ private fun CommentImageViewer(
             pageCount = { pictures.size }
         )
 
+        val savePermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (granted) {
+                scope.launch {
+                    CommentImageActions.saveToGallery(context, fullResPic(pictures[pagerState.currentPage].imgSrc))
+                }
+            } else {
+                Toast.makeText(context, "需要存储权限才能保存图片", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         LaunchedEffect(pagerState.currentPage) {
             currentScale = 1f
         }
@@ -1023,8 +1041,17 @@ private fun CommentImageViewer(
                             label = "保存",
                             onClick = {
                                 showActions = false
-                                scope.launch {
-                                    CommentImageActions.saveToGallery(context, fullResPic(pictures[pagerState.currentPage].imgSrc))
+                                val url = fullResPic(pictures[pagerState.currentPage].imgSrc)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    scope.launch {
+                                        CommentImageActions.saveToGallery(context, url)
+                                    }
+                                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                                    scope.launch {
+                                        CommentImageActions.saveToGallery(context, url)
+                                    }
+                                } else {
+                                    savePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                                 }
                             }
                         )
