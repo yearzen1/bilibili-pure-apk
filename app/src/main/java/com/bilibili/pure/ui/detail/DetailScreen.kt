@@ -1090,8 +1090,7 @@ private fun ZoomableImage(
     val request = remember(model) {
         ImageRequest.Builder(context)
             .data(model)
-            // 解码原分辨率,放大时清晰(同微信)
-            .size(Size.ORIGINAL)
+            .size(4096)
             .build()
     }
     // telephoto:捏合缩放/双击切换/拖动/单击/长按全部内置,并自动把未缩放时的
