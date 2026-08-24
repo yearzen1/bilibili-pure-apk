@@ -1,6 +1,10 @@
 package com.bilibili.pure.data.model
 
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
+import java.lang.reflect.Type
 
 data class ApiResponse<T>(
     val code: Int,
@@ -276,7 +280,34 @@ data class UserVideoItem(
     val description: String,
     val mid: Long,
     val author: String
-)
+) {
+    companion object {
+        val deserializer = JsonDeserializer { json: JsonElement, _: Type, _: JsonDeserializationContext ->
+            val obj = json.asJsonObject
+            fun safeLong(key: String): Long {
+                val elem = obj.get(key) ?: return 0L
+                if (elem.isJsonPrimitive) {
+                    val p = elem.asJsonPrimitive
+                    if (p.isNumber) return p.asLong
+                    if (p.isString) return p.asString.toLongOrNull() ?: 0L
+                }
+                return 0L
+            }
+            UserVideoItem(
+                bvid = obj.get("bvid")?.asString ?: "",
+                aid = obj.get("aid")?.asLong ?: 0L,
+                title = obj.get("title")?.asString ?: "",
+                pic = obj.get("pic")?.asString ?: "",
+                playCount = safeLong("play"),
+                danmakuCount = safeLong("video_review"),
+                pubdate = obj.get("pubdate")?.asLong ?: 0L,
+                description = obj.get("description")?.asString ?: "",
+                mid = obj.get("mid")?.asLong ?: 0L,
+                author = obj.get("author")?.asString ?: ""
+            )
+        }
+    }
+}
 
 data class UserSpacePage(
     val pn: Int = 1,

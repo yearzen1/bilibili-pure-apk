@@ -386,7 +386,13 @@ interface BilibiliApi {
             return Retrofit.Builder()
                 .baseUrl(BASE_URL)
                 .client(httpClient)
-                .addConverterFactory(GsonConverterFactory.create())
+                .addConverterFactory(
+                    GsonConverterFactory.create(
+                        com.google.gson.GsonBuilder()
+                            .registerTypeAdapter(UserVideoItem::class.java, UserVideoItem.deserializer)
+                            .create()
+                    )
+                )
                 .build()
                 .create(BilibiliApi::class.java)
         }
