@@ -38,3 +38,13 @@ private fun decodeEntities(text: String): String {
 fun cleanHtmlText(text: String): String = decodeEntities(HTML_TAG_REGEX.replace(text, ""))
 
 fun decodeHtmlEntities(text: String): String = decodeEntities(text)
+
+fun formatDuration(raw: String): String {
+    val parts = raw.split(":")
+    if (parts.size == 2) {
+        val minutes = parts[0].toIntOrNull() ?: return raw
+        val seconds = parts[1].toIntOrNull() ?: return raw
+        return "$minutes:${seconds.toString().padStart(2, '0')}"
+    }
+    return raw
+}

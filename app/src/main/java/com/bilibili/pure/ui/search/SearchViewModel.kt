@@ -8,6 +8,7 @@ import com.bilibili.pure.data.local.SearchHistoryManager
 import com.bilibili.pure.data.model.SearchVideoItem
 import com.bilibili.pure.data.repository.BilibiliRepository
 import com.bilibili.pure.util.cleanHtmlText
+import com.bilibili.pure.util.formatDuration
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,7 +100,8 @@ class SearchViewModel(
                             .map { it.copy(
                                 title = cleanHtmlText(it.title),
                                 author = cleanHtmlText(it.author),
-                                description = cleanHtmlText(it.description)
+                                description = cleanHtmlText(it.description),
+                                duration = formatDuration(it.duration)
                             ) },
                         isLoading = false,
                         currentPage = 1,
@@ -148,7 +150,8 @@ class SearchViewModel(
                         .map { it.copy(
                             title = cleanHtmlText(it.title),
                             author = cleanHtmlText(it.author),
-                            description = cleanHtmlText(it.description)
+                            description = cleanHtmlText(it.description),
+                            duration = formatDuration(it.duration)
                         ) }
                     _uiState.value = _uiState.value.copy(
                         results = _uiState.value.results + deduped,
