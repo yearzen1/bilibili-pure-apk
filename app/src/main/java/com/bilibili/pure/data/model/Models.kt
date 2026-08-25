@@ -188,7 +188,9 @@ data class DownloadInfo(
     val totalSize: Long = -1,
     val status: Int = 0,
     val speed: Long = 0,
-    val createTime: Long = System.currentTimeMillis()
+    val createTime: Long = System.currentTimeMillis(),
+    val page: Int = 1,
+    val part: String = ""
 ) {
     companion object {
         const val STATUS_PENDING = 0

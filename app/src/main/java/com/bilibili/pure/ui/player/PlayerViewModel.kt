@@ -9,11 +9,14 @@ import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.local.PlaybackProgressManager
 import com.bilibili.pure.data.model.*
 import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+enum class PlaybackSource { ONLINE, LOCAL }
 
 data class PlayerUiState(
     val isLoading: Boolean = true,
@@ -28,7 +31,8 @@ data class PlayerUiState(
     val currentQuality: QualityOption? = null,
     val dashVideo: DashStream? = null,
     val dashAudio: DashStream? = null,
-    val isDash: Boolean = false
+    val isDash: Boolean = false,
+    val localFiles: Map<Long, String> = emptyMap()
 )
 
 class PlayerViewModel(
@@ -43,56 +47,84 @@ class PlayerViewModel(
 
     private var cachedDashData: DashData? = null
 
-    fun load(bvid: String) {
-        Log.d(BilibiliApp.TAG, "PlayerVM: load bvid=$bvid")
+    fun load(bvid: String, cid: Long? = null, source: PlaybackSource = PlaybackSource.ONLINE) {
+        Log.d(BilibiliApp.TAG, "PlayerVM: load bvid=$bvid cid=$cid source=$source")
         viewModelScope.launch {
+            if (source == PlaybackSource.LOCAL) {
+                // 下载会话：只查「已完成」的下载记录，离线可活；不碰网络
+                val completed = DownloadManager.getInstance(BilibiliApp.instance)
+                    .getDownloads()
+                    .filter { it.bvid == bvid && it.status == DownloadInfo.STATUS_COMPLETED }
+                    .sortedBy { it.page }
+                if (completed.isEmpty()) {
+                    _uiState.value = PlayerUiState(isLoading = false, error = "未找到本地下载")
+                    return@launch
+                }
+                val pages = completed.map { VideoPage(cid = it.cid, page = it.page, part = it.part, duration = 0) }
+                val current = completed.find { it.cid == cid } ?: completed.first()
+                val currentPage = pages.find { it.cid == current.cid } ?: pages.first()
+                _uiState.value = PlayerUiState(
+                    isLoading = false,
+                    videoUrl = "file://${current.filePath}",
+                    pages = pages,
+                    currentPage = currentPage,
+                    title = completed.first().title,
+                    isDash = false,
+                    localFiles = completed.associate { it.cid to it.filePath }
+                )
+                return@launch
+            }
+
+            // 在线会话：纯联网，localFiles 留空（不混本地文件）
             _uiState.value = PlayerUiState(isLoading = true)
 
             repository.getVideoInfo(bvid)
                 .onSuccess { info ->
-                    val pages = info.pages?.ifEmpty {
-                        listOf(VideoPage(info.cid, 1, "", info.pages?.firstOrNull()?.duration ?: 0))
-                    } ?: listOf(VideoPage(info.cid, 1, "", 0))
+                val pages = info.pages?.ifEmpty {
+                    listOf(VideoPage(info.cid, 1, "", info.pages?.firstOrNull()?.duration ?: 0))
+                } ?: listOf(VideoPage(info.cid, 1, "", 0))
 
-                    val firstPage = pages.first()
+                val firstPage = pages.first()
 
-                    val lastPageCid = playbackProgressManager.lastCid(info.aid)
-                    val startPage = if (lastPageCid != null) {
-                        pages.find { it.cid == lastPageCid } ?: firstPage
-                    } else {
-                        firstPage
-                    }
+                val lastPageCid = playbackProgressManager.lastCid(info.aid)
+                val startPage = cid?.let { pages.find { p -> p.cid == cid } }
+                    ?: lastPageCid?.let { pages.find { p -> p.cid == it } }
+                    ?: firstPage
 
-                    val resumeMs = (playbackProgressManager.load(info.aid, startPage.cid) ?: 0L) * 1000L
+                val resumeMs = (playbackProgressManager.load(info.aid, startPage.cid) ?: 0L) * 1000L
 
-                    _uiState.value = _uiState.value.copy(
-                        videoInfo = info,
-                        pages = pages,
-                        currentPage = startPage,
-                        title = info.title,
-                        resumePositionMs = resumeMs
-                    )
-                    Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> pageCid=${startPage.cid} resumeMs=${resumeMs}")
-                    loadPlayUrlDash(bvid, startPage.cid)
-                }
-                .onFailure { e ->
-                    Log.e(BilibiliApp.TAG, "PlayerVM: load failed", e)
-                    _uiState.value = PlayerUiState(isLoading = false, error = e.message ?: "加载失败")
-                }
+                _uiState.value = _uiState.value.copy(
+                    videoInfo = info,
+                    pages = pages,
+                    currentPage = startPage,
+                    title = info.title,
+                    resumePositionMs = resumeMs,
+                    localFiles = emptyMap()
+                )
+                Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> pageCid=${startPage.cid} resumeMs=${resumeMs}")
+                loadPlayUrlDash(bvid, startPage.cid)
+            }
+            .onFailure { e ->
+                Log.e(BilibiliApp.TAG, "PlayerVM: load failed", e)
+                _uiState.value = PlayerUiState(isLoading = false, error = e.message ?: "加载失败")
+            }
         }
     }
 
-    fun loadLocal(filePath: String) {
-        Log.d(BilibiliApp.TAG, "PlayerVM: loadLocal filePath=$filePath")
-        _uiState.value = PlayerUiState(
-            isLoading = false,
-            videoUrl = "file://$filePath",
-            title = filePath.substringAfterLast("/").substringBeforeLast("."),
-            isDash = false
-        )
-    }
-
     fun selectPage(page: VideoPage) {
+        // 本地已下载的分 P：直接切本地文件，不联网
+        val localPath = _uiState.value.localFiles[page.cid]
+        if (localPath != null) {
+            Log.d(BilibiliApp.TAG, "PlayerVM: selectPage local page=${page.page} cid=${page.cid}")
+            _uiState.value = _uiState.value.copy(
+                currentPage = page,
+                videoUrl = "file://$localPath",
+                isDash = false,
+                isLoading = false
+            )
+            return
+        }
+
         val info = _uiState.value.videoInfo ?: return
         val bvid = info.bvid
         Log.d(BilibiliApp.TAG, "PlayerVM: selectPage page=${page.page} cid=${page.cid} part=${page.part}")

@@ -8,12 +8,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+data class DownloadGroup(
+    val bvid: String,
+    val title: String,
+    val cover: String,
+    val downloads: List<DownloadInfo>
+)
+
+sealed class DownloadListItem {
+    data class Group(val group: DownloadGroup) : DownloadListItem()
+    data class Single(val download: DownloadInfo) : DownloadListItem()
+}
+
 class DownloadsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val downloadManager = DownloadManager.getInstance(application)
 
-    private val _downloads = MutableStateFlow<List<DownloadInfo>>(emptyList())
-    val downloads: StateFlow<List<DownloadInfo>> = _downloads.asStateFlow()
+    private val _items = MutableStateFlow<List<DownloadListItem>>(emptyList())
+    val items: StateFlow<List<DownloadListItem>> = _items.asStateFlow()
 
     private val callback: () -> Unit = { load() }
 
@@ -29,11 +41,38 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun load() {
-        _downloads.value = downloadManager.getDownloads()
+        val downloads = downloadManager.getDownloads()
+        val grouped = downloads.groupBy { it.bvid }
+        val items = mutableListOf<DownloadListItem>()
+
+        for ((bvid, group) in grouped) {
+            if (group.size > 1) {
+                val sorted = group.sortedBy { it.page }
+                items.add(
+                    DownloadListItem.Group(
+                        DownloadGroup(
+                            bvid = bvid,
+                            title = sorted.first().title,
+                            cover = sorted.first().cover,
+                            downloads = sorted
+                        )
+                    )
+                )
+            } else {
+                items.add(DownloadListItem.Single(group.first()))
+            }
+        }
+
+        _items.value = items
     }
 
     fun deleteDownload(download: DownloadInfo) {
         downloadManager.deleteDownload(download.id)
+        load()
+    }
+
+    fun deleteGroup(group: DownloadGroup) {
+        group.downloads.forEach { downloadManager.deleteDownload(it.id) }
         load()
     }
 

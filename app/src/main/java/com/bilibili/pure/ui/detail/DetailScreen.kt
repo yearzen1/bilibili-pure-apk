@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Size
 import com.bilibili.pure.data.model.VideoInfo
+import com.bilibili.pure.data.model.VideoPage
 import com.bilibili.pure.ui.common.DismissSelectionCard
 import com.bilibili.pure.ui.common.DismissSelectionClickable
 import com.bilibili.pure.ui.search.formatCount
@@ -111,10 +112,47 @@ fun DetailScreen(
     var isLoadingQualities by remember { mutableStateOf(false) }
     var confirmMobilePlay by remember { mutableStateOf(false) }
     var confirmMobileDownload by remember { mutableStateOf(false) }
+    var showMultiPDialog by remember { mutableStateOf(false) }
+    var multiPQualities by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
+    var multiPSelectedQuality by remember { mutableStateOf<QualityOption?>(null) }
+    var multiPSelectedPages by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var isStartingBatchDownload by remember { mutableStateOf(false) }
 
     fun startDownloadFlow() {
         val dm = DownloadManager.getInstance(context)
-        val existing = dm.getDownload("${bvid}_${uiState.videoInfo?.cid ?: 0}")
+        val videoInfo = uiState.videoInfo ?: return
+        val pages = videoInfo.pages
+
+        if (pages != null && pages.size > 1) {
+            showMultiPDialog = true
+            multiPSelectedPages = emptySet()
+            multiPSelectedQuality = null
+            scope.launch {
+                try {
+                    val api = BilibiliApi.create()
+                    val response = withContext(Dispatchers.IO) {
+                        api.getPlayUrlDash(bvid = bvid, cid = pages.first().cid)
+                    }
+                    if (response.code == 0) {
+                        val info = response.data
+                        val qualities = info?.accept_quality?.zip(info.accept_description ?: emptyList()) { q, desc ->
+                            QualityOption(quality = q, description = desc)
+                        } ?: emptyList()
+                        multiPQualities = qualities
+                        multiPSelectedQuality = qualities.firstOrNull()
+                    } else {
+                        Toast.makeText(context, "获取画质信息失败", Toast.LENGTH_SHORT).show()
+                        showMultiPDialog = false
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "获取画质信息失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showMultiPDialog = false
+                }
+            }
+            return
+        }
+
+        val existing = dm.getDownload("${bvid}_${videoInfo.cid}")
         if (existing != null) {
             val msg = when (existing.status) {
                 DownloadInfo.STATUS_COMPLETED -> "该视频已下载，可在“我的下载”中查看"
@@ -132,7 +170,7 @@ fun DetailScreen(
             try {
                 val api = BilibiliApi.create()
                 val response = withContext(Dispatchers.IO) {
-                    api.getPlayUrlDash(bvid = bvid, cid = uiState.videoInfo?.cid ?: 0)
+                    api.getPlayUrlDash(bvid = bvid, cid = videoInfo.cid)
                 }
                 if (response.code == 0) {
                     val info = response.data
@@ -256,6 +294,66 @@ fun DetailScreen(
         )
     }
 
+    if (showMultiPDialog && uiState.videoInfo != null) {
+        val videoInfo = uiState.videoInfo!!
+        val pages = videoInfo.pages ?: emptyList()
+        PageSelectionDialog(
+            pages = pages,
+            qualities = multiPQualities,
+            selectedQuality = multiPSelectedQuality,
+            selectedPages = multiPSelectedPages,
+            onToggleAll = {
+                multiPSelectedPages = if (multiPSelectedPages.size == pages.size) {
+                    emptySet()
+                } else {
+                    pages.map { it.page }.toSet()
+                }
+            },
+            onTogglePage = { pageNum ->
+                multiPSelectedPages = if (pageNum in multiPSelectedPages) {
+                    multiPSelectedPages - pageNum
+                } else {
+                    multiPSelectedPages + pageNum
+                }
+            },
+            onSelectQuality = { quality ->
+                multiPSelectedQuality = quality
+            },
+            onConfirm = {
+                val quality = multiPSelectedQuality ?: return@PageSelectionDialog
+                val selected = pages.filter { it.page in multiPSelectedPages }
+                if (selected.isEmpty()) return@PageSelectionDialog
+                showMultiPDialog = false
+                isStartingBatchDownload = true
+                scope.launch {
+                    try {
+                        DownloadManager.getInstance(context).startBatchDownload(
+                            bvid = bvid,
+                            videoTitle = videoInfo.title,
+                            cover = videoInfo.pic,
+                            pages = selected.map {
+                                DownloadManager.BatchPageInfo(
+                                    cid = it.cid,
+                                    page = it.page,
+                                    part = it.part
+                                )
+                            },
+                            quality = quality.quality,
+                            qualityDesc = quality.description
+                        )
+                        Toast.makeText(context, "开始下载 ${selected.size} 个分P", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "下载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    } finally {
+                        isStartingBatchDownload = false
+                    }
+                }
+            },
+            onDismiss = { showMultiPDialog = false },
+            isLoading = isStartingBatchDownload
+        )
+    }
+
     if (confirmMobilePlay) {
         AlertDialog(
             onDismissRequest = { confirmMobilePlay = false },
@@ -327,6 +425,137 @@ private fun QualitySelectionDialog(
             }
         }
     )
+}
+
+@Composable
+private fun PageSelectionDialog(
+    pages: List<VideoPage>,
+    qualities: List<QualityOption>,
+    selectedQuality: QualityOption?,
+    selectedPages: Set<Int>,
+    onToggleAll: () -> Unit,
+    onTogglePage: (Int) -> Unit,
+    onSelectQuality: (QualityOption) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    isLoading: Boolean = false
+) {
+    val allSelected = selectedPages.size == pages.size
+    var showQualityMenu by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = allSelected,
+                        onCheckedChange = { onToggleAll() }
+                    )
+                    Text("全选", style = MaterialTheme.typography.titleMedium)
+                }
+                Box {
+                    TextButton(onClick = { showQualityMenu = true }) {
+                        Text(
+                            text = selectedQuality?.description ?: "画质",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showQualityMenu,
+                        onDismissRequest = { showQualityMenu = false }
+                    ) {
+                        qualities.forEach { quality ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = quality.description,
+                                        color = if (quality.quality == selectedQuality?.quality)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    onSelectQuality(quality)
+                                    showQualityMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        text = {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+                modifier = Modifier.heightIn(max = 400.dp)
+            ) {
+                items(pages.size) { index ->
+                    val page = pages[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTogglePage(page.page) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = page.page in selectedPages,
+                            onCheckedChange = { onTogglePage(page.page) }
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "P${page.page}  ${page.part}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (page.duration > 0) {
+                                Text(
+                                    text = formatDuration(page.duration),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = selectedPages.isNotEmpty() && !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("下载 ${selectedPages.size} 个分P")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+private fun formatDuration(seconds: Long): String {
+    val min = seconds / 60
+    val sec = seconds % 60
+    return "%d:%02d".format(min, sec)
 }
 
 @Composable

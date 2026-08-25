@@ -17,6 +17,8 @@ sealed class Screen(
 object Routes {
     const val DETAIL = "detail/{bvid}"
     const val PLAYER = "player/{bvid}"
+    const val PLAYER_CID = "player/{bvid}/{cid}"
+    const val DOWNLOAD_PLAY = "download/{bvid}/{cid}"
     const val LOGIN = "login"
     const val HISTORY = "history"
     const val CHANNEL = "channel/{mid}"
@@ -25,15 +27,18 @@ object Routes {
     const val FOLLOWING = "following"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
-    const val LOCAL_PLAYER = "local/{filePath}"
 
     fun detail(bvid: String): String {
         if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
         return "detail/$bvid"
     }
-    fun player(bvid: String): String {
+    fun player(bvid: String, cid: Long? = null): String {
         if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
-        return "player/$bvid"
+        return if (cid != null) "player/$bvid/$cid" else "player/$bvid"
+    }
+    fun downloadPlay(bvid: String, cid: Long): String {
+        if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
+        return "download/$bvid/$cid"
     }
     fun channel(mid: Long) = "channel/$mid"
     fun channelSearch(mid: Long, keyword: String): String {

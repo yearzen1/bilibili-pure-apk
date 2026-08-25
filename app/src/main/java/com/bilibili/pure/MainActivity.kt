@@ -37,6 +37,7 @@ import com.bilibili.pure.ui.navigation.Routes
 import com.bilibili.pure.ui.navigation.Screen
 import com.bilibili.pure.ui.navigation.bottomNavItems
 import com.bilibili.pure.ui.player.PlayerScreen
+import com.bilibili.pure.ui.player.PlaybackSource
 import com.bilibili.pure.ui.profile.ProfileScreen
 import com.bilibili.pure.ui.search.SearchScreen
 import com.bilibili.pure.ui.settings.SettingsScreen
@@ -187,7 +188,44 @@ fun MainScreen(
                 val bvid = backStackEntry.arguments?.getString("bvid") ?: return@composable
                 PlayerScreen(
                     bvid = bvid,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    source = PlaybackSource.ONLINE
+                )
+            }
+
+            composable(
+                route = Routes.PLAYER_CID,
+                arguments = listOf(
+                    navArgument("bvid") { type = NavType.StringType },
+                    navArgument("cid") { type = NavType.LongType }
+                ),
+                popExitTransition = { slideOutHorizontally { it } }
+            ) { backStackEntry ->
+                val bvid = backStackEntry.arguments?.getString("bvid") ?: return@composable
+                val cid = backStackEntry.arguments?.getLong("cid") ?: 0L
+                PlayerScreen(
+                    bvid = bvid,
+                    onBack = { navController.popBackStack() },
+                    startCid = if (cid != 0L) cid else null,
+                    source = PlaybackSource.ONLINE
+                )
+            }
+
+            composable(
+                route = Routes.DOWNLOAD_PLAY,
+                arguments = listOf(
+                    navArgument("bvid") { type = NavType.StringType },
+                    navArgument("cid") { type = NavType.LongType }
+                ),
+                popExitTransition = { slideOutHorizontally { it } }
+            ) { backStackEntry ->
+                val bvid = backStackEntry.arguments?.getString("bvid") ?: return@composable
+                val cid = backStackEntry.arguments?.getLong("cid") ?: 0L
+                PlayerScreen(
+                    bvid = bvid,
+                    onBack = { navController.popBackStack() },
+                    startCid = if (cid != 0L) cid else null,
+                    source = PlaybackSource.LOCAL
                 )
             }
 
@@ -232,8 +270,8 @@ fun MainScreen(
             composable(route = Routes.DOWNLOADS) {
                 DownloadsScreen(
                     onBack = { navController.popBackStack() },
-                    onPlay = { filePath ->
-                        navController.navigate("local/${android.net.Uri.encode(filePath)}")
+                    onPlay = { bvid, cid ->
+                        navController.navigate(Routes.downloadPlay(bvid, cid))
                     },
                     onDetail = { bvid ->
                         navController.navigate(Routes.detail(bvid))
@@ -244,18 +282,6 @@ fun MainScreen(
             composable(route = Routes.SETTINGS) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(
-                route = Routes.LOCAL_PLAYER,
-                arguments = listOf(navArgument("filePath") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val filePath = backStackEntry.arguments?.getString("filePath") ?: return@composable
-                PlayerScreen(
-                    bvid = "",
-                    onBack = { navController.popBackStack() },
-                    localFilePath = filePath
                 )
             }
 

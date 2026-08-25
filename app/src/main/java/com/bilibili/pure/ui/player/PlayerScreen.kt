@@ -62,7 +62,8 @@ fun PlayerScreen(
     bvid: String,
     onBack: () -> Unit,
     vm: PlayerViewModel = viewModel(),
-    localFilePath: String? = null
+    startCid: Long? = null,
+    source: PlaybackSource = PlaybackSource.ONLINE
 ) {
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -70,13 +71,10 @@ fun PlayerScreen(
     var playing by remember { mutableStateOf(false) }
     var lastPreparedCid by remember { mutableStateOf<Long?>(null) }
 
-    LaunchedEffect(bvid, localFilePath) {
-        if (!localFilePath.isNullOrBlank()) {
-            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering local=$localFilePath")
-            vm.loadLocal(localFilePath)
-        } else if (bvid.isNotBlank()) {
-            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid")
-            vm.load(bvid)
+    LaunchedEffect(bvid, startCid, source) {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid cid=$startCid source=$source")
+        if (bvid.isNotBlank()) {
+            vm.load(bvid, startCid, source)
         }
     }
 
@@ -160,7 +158,7 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         WifiMonitor.wifiLost.collect {
-            if (AppSettings.wifiOnlyPlayback && localFilePath.isNullOrBlank() && player.playWhenReady) {
+            if (AppSettings.wifiOnlyPlayback && vm.uiState.value.localFiles.isEmpty() && player.playWhenReady) {
                 pausedByWifi.value = true
                 player.pause()
                 android.widget.Toast.makeText(context, "WiFi已断开，播放已暂停", android.widget.Toast.LENGTH_SHORT).show()

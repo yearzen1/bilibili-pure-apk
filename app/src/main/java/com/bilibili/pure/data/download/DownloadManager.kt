@@ -82,7 +82,9 @@ class DownloadManager(private val context: Context) {
         quality: Int,
         qualityDesc: String,
         url: String,
-        overrideWifiOnly: Boolean = false
+        overrideWifiOnly: Boolean = false,
+        page: Int = 1,
+        part: String = ""
     ) {
         if (!overrideWifiOnly && AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
             Log.d(TAG, "Download blocked: WiFi-only mode and not on WiFi")
@@ -104,7 +106,8 @@ class DownloadManager(private val context: Context) {
 
         val ext = "mp4"
         val safeTitle = title.replace(Regex("[^\\w\\u4e00-\\u9fff\\-]"), "_").take(50)
-        val fileName = "${safeTitle}_${qualityDesc}.${ext}"
+        val pagePrefix = if (part.isNotEmpty()) "P${page} ${part.replace(Regex("[^\\w\\u4e00-\\u9fff\\-]"), "_").take(30)}_" else ""
+        val fileName = "${pagePrefix}${safeTitle}_${qualityDesc}.${ext}"
         val file = File(downloadsDir, fileName)
 
         val info = DownloadInfo(
@@ -119,7 +122,9 @@ class DownloadManager(private val context: Context) {
             fileSize = file.length(),
             totalSize = -1,
             status = DownloadInfo.STATUS_PENDING,
-            createTime = System.currentTimeMillis()
+            createTime = System.currentTimeMillis(),
+            page = page,
+            part = part
         )
 
         val downloads = getDownloads().toMutableList()
@@ -137,6 +142,53 @@ class DownloadManager(private val context: Context) {
             downloadFile(info, url)
         }
         activeJobs[id] = job
+    }
+
+    data class BatchPageInfo(
+        val cid: Long,
+        val page: Int,
+        val part: String
+    )
+
+    suspend fun startBatchDownload(
+        bvid: String,
+        videoTitle: String,
+        cover: String,
+        pages: List<BatchPageInfo>,
+        quality: Int,
+        qualityDesc: String
+    ) {
+        val api = BilibiliApi.create()
+        for (p in pages) {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    api.getPlayUrl(bvid = bvid, cid = p.cid, qn = quality)
+                }
+                if (response.code == 0) {
+                    val url = response.data?.durl?.firstOrNull()?.url
+                    if (url != null) {
+                        startDownload(
+                            bvid = bvid,
+                            cid = p.cid,
+                            title = videoTitle,
+                            cover = cover,
+                            quality = quality,
+                            qualityDesc = qualityDesc,
+                            url = url,
+                            overrideWifiOnly = true,
+                            page = p.page,
+                            part = p.part
+                        )
+                    } else {
+                        Log.w(TAG, "Batch download: no URL for P${p.page} ${p.part}")
+                    }
+                } else {
+                    Log.w(TAG, "Batch download: API error for P${p.page} ${p.part}: ${response.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Batch download failed for P${p.page} ${p.part}", e)
+            }
+        }
     }
 
     private fun startForegroundService() {

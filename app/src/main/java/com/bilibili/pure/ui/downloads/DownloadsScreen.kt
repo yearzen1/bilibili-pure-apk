@@ -1,5 +1,6 @@
 package com.bilibili.pure.ui.downloads
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,6 +8,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -33,16 +36,28 @@ private fun fixPic(url: String): String = when {
 @Composable
 fun DownloadsScreen(
     onBack: () -> Unit,
-    onPlay: (filePath: String) -> Unit,
+    onPlay: (bvid: String, cid: Long) -> Unit,
     onDetail: (bvid: String) -> Unit,
     viewModel: DownloadsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val downloads by viewModel.downloads.collectAsState()
+    val items by viewModel.items.collectAsState()
     val context = LocalContext.current
     var confirmResume by remember { mutableStateOf<DownloadInfo?>(null) }
+    var confirmDelete by remember { mutableStateOf<DownloadInfo?>(null) }
+    var confirmDeleteGroup by remember { mutableStateOf<DownloadGroup?>(null) }
+    var confirmClearCompleted by remember { mutableStateOf(false) }
+    val expandedMap = remember { mutableStateMapOf<String, Boolean>() }
 
     LaunchedEffect(Unit) {
         viewModel.load()
+    }
+
+    fun requestResume(download: DownloadInfo) {
+        if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
+            confirmResume = download
+        } else {
+            viewModel.resumeDownload(download)
+        }
     }
 
     Scaffold(
@@ -55,8 +70,13 @@ fun DownloadsScreen(
                     }
                 },
                 actions = {
-                    if (downloads.any { it.status == DownloadInfo.STATUS_COMPLETED }) {
-                        TextButton(onClick = { viewModel.clearCompleted() }) {
+                    if (items.any { item ->
+                        when (item) {
+                            is DownloadListItem.Single -> item.download.status == DownloadInfo.STATUS_COMPLETED
+                            is DownloadListItem.Group -> item.group.downloads.any { it.status == DownloadInfo.STATUS_COMPLETED }
+                        }
+                    }) {
+                        TextButton(onClick = { confirmClearCompleted = true }) {
                             Text("清除已完成", style = MaterialTheme.typography.labelMedium)
                         }
                     }
@@ -64,7 +84,7 @@ fun DownloadsScreen(
             )
         }
     ) { padding ->
-        if (downloads.isEmpty()) {
+        if (items.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -93,21 +113,43 @@ fun DownloadsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(downloads, key = { it.id }) { download ->
-                    DownloadItem(
-                        download = download,
-                        onPlay = { onPlay(download.filePath) },
-                        onDetail = { onDetail(download.bvid) },
-                        onDelete = { viewModel.deleteDownload(download) },
-                        onPause = { viewModel.pauseDownload(download) },
-                        onResume = {
-                            if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
-                                confirmResume = download
-                            } else {
-                                viewModel.resumeDownload(download)
-                            }
+                items(
+                    items,
+                    key = {
+                        when (it) {
+                            is DownloadListItem.Single -> it.download.id
+                            is DownloadListItem.Group -> "group_${it.group.bvid}"
                         }
-                    )
+                    }
+                ) { item ->
+                    when (item) {
+                        is DownloadListItem.Single -> {
+                            DownloadItem(
+                                download = item.download,
+                                onPlay = { onPlay(item.download.bvid, item.download.cid) },
+                                onDetail = { onDetail(item.download.bvid) },
+                                onDelete = { confirmDelete = item.download },
+                                onPause = { viewModel.pauseDownload(item.download) },
+                                onResume = { requestResume(item.download) }
+                            )
+                        }
+                        is DownloadListItem.Group -> {
+                            val isExpanded = expandedMap[item.group.bvid] ?: true
+                            DownloadGroupCard(
+                                group = item.group,
+                                isExpanded = isExpanded,
+                                onToggleExpand = {
+                                    expandedMap[item.group.bvid] = !isExpanded
+                                },
+                                onPlay = { bvid, cid -> onPlay(bvid, cid) },
+                                onDetail = { onDetail(item.group.bvid) },
+                                onDelete = { confirmDelete = it },
+                                onDeleteGroup = { confirmDeleteGroup = item.group },
+                                onPause = { viewModel.pauseDownload(it) },
+                                onResume = { requestResume(it) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -133,6 +175,271 @@ fun DownloadsScreen(
             }
         )
     }
+
+    confirmDelete?.let { dl ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("删除下载") },
+            text = { Text("确定要删除「${dl.title}」吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = null
+                    viewModel.deleteDownload(dl)
+                }) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    confirmDeleteGroup?.let { g ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteGroup = null },
+            title = { Text("删除下载") },
+            text = { Text("确定要删除「${g.title}」的全部 ${g.downloads.size} 个分P吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeleteGroup = null
+                    viewModel.deleteGroup(g)
+                }) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteGroup = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (confirmClearCompleted) {
+        AlertDialog(
+            onDismissRequest = { confirmClearCompleted = false },
+            title = { Text("清除已完成") },
+            text = { Text("确定要删除所有已完成的下载吗？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearCompleted = false
+                    viewModel.clearCompleted()
+                }) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearCompleted = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DownloadGroupCard(
+    group: DownloadGroup,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onPlay: (bvid: String, cid: Long) -> Unit,
+    onDetail: () -> Unit,
+    onDelete: (DownloadInfo) -> Unit,
+    onDeleteGroup: () -> Unit,
+    onPause: (DownloadInfo) -> Unit,
+    onResume: (DownloadInfo) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand() }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = fixPic(group.cover),
+                    contentDescription = group.title,
+                    modifier = Modifier.size(72.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = group.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "共 ${group.downloads.size} 个分P · ${group.downloads.first().qualityDesc}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = onToggleExpand) {
+                    Icon(
+                        if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "收起" else "展开",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDeleteGroup) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除全部",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            if (isExpanded) {
+                HorizontalDivider()
+                group.downloads.forEach { download ->
+                    DownloadSubItem(
+                        download = download,
+                        onPlay = { onPlay(download.bvid, download.cid) },
+                        onDetail = onDetail,
+                        onDelete = { onDelete(download) },
+                        onPause = { onPause(download) },
+                        onResume = { onResume(download) }
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadSubItem(
+    download: DownloadInfo,
+    onPlay: () -> Unit,
+    onDetail: () -> Unit,
+    onDelete: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onDetail() }
+            .padding(12.dp, 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "P${download.page}  ${download.part}",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = download.qualityDesc,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+
+            if ((download.status == DownloadInfo.STATUS_DOWNLOADING || download.status == DownloadInfo.STATUS_PAUSED) && download.totalSize > 0) {
+                Text(
+                    text = "${formatFileSize(download.fileSize)} / ${formatFileSize(download.totalSize)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (download.status == DownloadInfo.STATUS_DOWNLOADING && download.speed > 0) {
+                    val remaining = remainingText(download)
+                    Text(
+                        text = if (remaining != null) {
+                            "${formatSpeed(download.speed)} · $remaining"
+                        } else {
+                            formatSpeed(download.speed)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else if (download.status == DownloadInfo.STATUS_COMPLETED) {
+                Text(
+                    text = formatFileSize(download.fileSize),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = if (download.totalSize > 0) formatFileSize(download.totalSize) else "未知大小",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if ((download.status == DownloadInfo.STATUS_DOWNLOADING || download.status == DownloadInfo.STATUS_PAUSED) && download.totalSize > 0) {
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { (download.fileSize.toFloat() / download.totalSize).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            if (download.status == DownloadInfo.STATUS_FAILED) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "下载失败，点击重试",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            when (download.status) {
+                DownloadInfo.STATUS_COMPLETED -> {
+                    IconButton(onClick = onPlay) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "播放",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                DownloadInfo.STATUS_DOWNLOADING -> {
+                    IconButton(onClick = onPause) {
+                        Icon(
+                            Icons.Default.Pause,
+                            contentDescription = "暂停",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                DownloadInfo.STATUS_PAUSED, DownloadInfo.STATUS_FAILED -> {
+                    IconButton(onClick = onResume) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "继续",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -144,8 +451,6 @@ private fun DownloadItem(
     onPause: () -> Unit,
     onResume: () -> Unit
 ) {
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-
     DismissSelectionCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onDetail,
@@ -246,7 +551,7 @@ private fun DownloadItem(
                         }
                     }
 
-                    IconButton(onClick = { showDeleteConfirm = true }) {
+                    IconButton(onClick = onDelete) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "删除",
@@ -273,27 +578,6 @@ private fun DownloadItem(
                 )
             }
         }
-    }
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("删除下载") },
-            text = { Text("确定要删除「${download.title}」吗？") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    onDelete()
-                }) {
-                    Text("删除")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消")
-                }
-            }
-        )
     }
 }
 
