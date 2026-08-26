@@ -1036,8 +1036,9 @@ private fun CommentCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     SelectionContainer {
-                        Text(
-                            text = comment.content.message,
+                        CommentText(
+                            message = comment.content.message,
+                            emote = comment.content.emote,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -1107,8 +1108,9 @@ private fun ReplyRow(
                 )
             }
             SelectionContainer {
-                Text(
-                    text = reply.content.message,
+                CommentText(
+                    message = reply.content.message,
+                    emote = reply.content.emote,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

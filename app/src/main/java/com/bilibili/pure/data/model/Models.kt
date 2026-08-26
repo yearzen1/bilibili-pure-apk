@@ -93,7 +93,18 @@ data class CommentItem(
 
 data class CommentContent(
     val message: String,
+    @SerializedName("emote") val emote: Map<String, EmoteInfo>? = null,
     val pictures: List<CommentPicture>? = null
+)
+
+data class EmoteInfo(
+    @SerializedName("text") val text: String = "",
+    @SerializedName("url") val url: String = "",
+    @SerializedName("meta") val meta: EmoteMeta? = null
+)
+
+data class EmoteMeta(
+    @SerializedName("size") val size: Int = 1
 )
 
 data class CommentPicture(
