@@ -22,7 +22,6 @@ object Routes {
     const val LOGIN = "login"
     const val HISTORY = "history"
     const val CHANNEL = "channel/{mid}"
-    const val CHANNEL_SEARCH = "channelSearch/{mid}?keyword={keyword}"
     const val FAVORITES = "favorites"
     const val FOLLOWING = "following"
     const val DOWNLOADS = "downloads"
@@ -41,10 +40,6 @@ object Routes {
         return "download/$bvid/$cid"
     }
     fun channel(mid: Long) = "channel/$mid"
-    fun channelSearch(mid: Long, keyword: String): String {
-        val encoded = java.net.URLEncoder.encode(keyword, "UTF-8")
-        return "channelSearch/$mid?keyword=$encoded"
-    }
 }
 
 val bottomNavItems = listOf(Screen.Search, Screen.Profile)

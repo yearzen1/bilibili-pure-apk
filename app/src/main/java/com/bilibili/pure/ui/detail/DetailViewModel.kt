@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentItem
+import com.bilibili.pure.data.model.UgcSeason
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
 import com.bilibili.pure.util.decodeHtmlEntities
@@ -43,7 +44,8 @@ data class DetailUiState(
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
-    private val defaultFolderId: Long? = null
+    private val defaultFolderId: Long? = null,
+    val ugcSeason: UgcSeason? = null
 ) {
     fun getDefaultFolderId() = defaultFolderId
     fun withDefaultFolderId(id: Long) = copy(defaultFolderId = id)
@@ -68,7 +70,8 @@ class DetailViewModel(
                     _uiState.value = _uiState.value.copy(
                         videoInfo = info,
                         isLoading = false,
-                        favoriteCount = info.stat.favorite
+                        favoriteCount = info.stat.favorite,
+                        ugcSeason = info.ugcSeason
                     )
                     loadComments(info.aid)
                     checkFavoured(info.aid)

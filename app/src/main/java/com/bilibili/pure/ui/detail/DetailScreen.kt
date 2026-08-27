@@ -26,6 +26,8 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
+import com.bilibili.pure.data.model.UgcSeason
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -102,6 +104,7 @@ fun DetailScreen(
     onPlay: (bvid: String) -> Unit,
     onUploaderClick: (mid: Long) -> Unit = {},
     onUserClick: (mid: Long) -> Unit = {},
+    onCollectionVideoClick: (bvid: String) -> Unit = {},
     viewModel: DetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -249,7 +252,9 @@ fun DetailScreen(
                 } else {
                     startDownloadFlow()
                 }
-            }
+            },
+            ugcSeason = uiState.ugcSeason,
+            onCollectionVideoClick = onCollectionVideoClick
         )
     }
 
@@ -588,10 +593,13 @@ private fun DetailContent(
     isFollowed: Boolean = false,
     isTogglingFollow: Boolean = false,
     onFollowUploader: (mid: Long) -> Unit = {},
-    onDownload: () -> Unit = {}
+    onDownload: () -> Unit = {},
+    ugcSeason: UgcSeason? = null,
+    onCollectionVideoClick: (bvid: String) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    var collectionExpanded by remember { mutableStateOf(false) }
 
     val nearBottom by remember {
         derivedStateOf {
@@ -782,6 +790,97 @@ private fun DetailContent(
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+                }
+
+                if (ugcSeason != null) {
+                    item(key = "ugc_season") {
+                        val episodes = ugcSeason.sections?.flatMap { it.episodes ?: emptyList() } ?: emptyList()
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { collectionExpanded = !collectionExpanded },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "合集：${ugcSeason.title}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (episodes.isNotEmpty()) {
+                                            Text(
+                                                text = "共 ${episodes.size} 集",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        if (collectionExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = if (collectionExpanded) "收起合集" else "展开合集"
+                                    )
+                                }
+                                if (collectionExpanded) {
+                                    Column {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        if (episodes.isEmpty()) {
+                                            Text(
+                                                text = "（暂无分集）",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        } else {
+                                            episodes.forEach { ep ->
+                                                val isCurrent = ep.bvid == videoInfo.bvid
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable(enabled = !isCurrent) {
+                                                            if (!isCurrent && ep.bvid.isNotBlank()) {
+                                                                onCollectionVideoClick(ep.bvid)
+                                                            }
+                                                        }
+                                                        .padding(vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    if (isCurrent) {
+                                                        Icon(
+                                                            Icons.Filled.PlayArrow,
+                                                            contentDescription = "当前播放",
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    } else {
+                                                        Spacer(modifier = Modifier.size(20.dp))
+                                                    }
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = ep.title.ifBlank { "P${ep.page?.page ?: 1}" },
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                                        else MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

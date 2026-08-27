@@ -118,6 +118,57 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "searchChannelVideos failed", it) }
     }
 
+    suspend fun getSpaceSeasons(mid: Long, pageNum: Int = 1): Result<SpaceSeasonsData> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSpaceSeasons: mid=$mid pageNum=$pageNum")
+        return runCatching {
+            val response = api.getSpaceSeasons(mid = mid, pageNum = pageNum)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSpaceSeasons response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) response.data ?: throw Exception("No data")
+            else throw Exception(response.message)
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSpaceSeasons failed", it) }
+    }
+
+    suspend fun getSeasonArchives(mid: Long, seasonId: Long, pageNum: Int = 1): Result<SeasonArchiveData> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchives: mid=$mid seasonId=$seasonId pageNum=$pageNum")
+        return runCatching {
+            val response = api.getSeasonArchives(mid = mid, seasonId = seasonId, pageNum = pageNum)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchives response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) response.data ?: throw Exception("No data")
+            else throw Exception(response.message)
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSeasonArchives failed", it) }
+    }
+
+    // 合集视频列表：绕过 gaia 风控(-352) 的 seasons_archives_list，
+    // 改用视频 view 接口的 ugc_season.sections[].episodes（完整分集，无需 gaia）。
+    suspend fun getSeasonArchivesViaView(bvid: String): Result<Pair<List<SeasonArchiveItem>, SeasonMeta?>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchivesViaView: bvid=$bvid")
+        return runCatching {
+            val response = api.getVideoInfo(bvid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchivesViaView response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) throw Exception(response.message)
+            val ugc = response.data?.ugcSeason ?: throw Exception("该视频不属于合集")
+            val episodes = ugc.sections?.flatMap { it.episodes ?: emptyList() } ?: emptyList()
+            val items = episodes.map { ep ->
+                SeasonArchiveItem(
+                    bvid = ep.bvid,
+                    title = ep.arc?.title ?: ep.title,
+                    pic = ep.arc?.pic ?: "",
+                    duration = ep.arc?.duration ?: ep.page?.duration ?: 0,
+                    pubdate = ep.arc?.pubdate ?: 0,
+                    stat = ep.arc?.stat
+                )
+            }
+            val meta = SeasonMeta(
+                seasonId = ugc.id,
+                name = ugc.title,
+                cover = ugc.cover,
+                total = items.size,
+                description = ugc.intro
+            )
+            items to meta
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSeasonArchivesViaView failed", it) }
+    }
+
     suspend fun getFavFolders(upMid: Long): Result<List<FavFolder>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid")
         return runCatching {

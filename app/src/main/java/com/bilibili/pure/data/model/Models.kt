@@ -49,7 +49,8 @@ data class VideoInfo(
     val tname: String = "",
     val videos: Int = 1,
     val pubdate: Long = 0,
-    val pages: List<VideoPage>? = null
+    val pages: List<VideoPage>? = null,
+    @SerializedName("ugc_season") val ugcSeason: UgcSeason? = null
 )
 
 data class VideoOwner(
@@ -73,6 +74,79 @@ data class VideoPage(
     val page: Int,
     val part: String,
     val duration: Long
+)
+
+data class UgcSeason(
+    val id: Long = 0,
+    val title: String = "",
+    val cover: String = "",
+    val intro: String = "",
+    @SerializedName("sections") val sections: List<UgcSeasonSection>? = null
+)
+
+data class UgcSeasonSection(
+    val id: Long = 0,
+    val title: String = "",
+    @SerializedName("episodes") val episodes: List<UgcSeasonEpisode>? = null
+)
+
+data class UgcSeasonEpisode(
+    val aid: Long = 0,
+    val bvid: String = "",
+    val cid: Long = 0,
+    val title: String = "",
+    @SerializedName("arc") val arc: UgcSeasonEpisodeArc? = null,
+    @SerializedName("page") val page: UgcSeasonEpisodePage? = null
+)
+
+data class UgcSeasonEpisodeArc(
+    val pic: String = "",
+    val title: String = "",
+    val pubdate: Long = 0,
+    val duration: Long = 0,
+    val stat: VideoStat? = null
+)
+
+data class UgcSeasonEpisodePage(
+    @SerializedName("page") val page: Int = 1,
+    @SerializedName("part") val part: String = "",
+    @SerializedName("cid") val cid: Long = 0,
+    @SerializedName("duration") val duration: Long = 0
+)
+
+data class SpaceSeasonsData(
+    @SerializedName("items_lists") val itemsLists: SeasonsItemsLists? = null
+)
+
+data class SeasonsItemsLists(
+    @SerializedName("seasons_list") val seasonsList: List<SeasonSummary>? = null
+)
+
+data class SeasonSummary(
+    val meta: SeasonMeta? = null,
+    val archives: List<SeasonArchiveItem>? = null
+)
+
+data class SeasonMeta(
+    @SerializedName("season_id") val seasonId: Long = 0,
+    val name: String = "",
+    val cover: String = "",
+    val total: Int = 0,
+    val description: String = ""
+)
+
+data class SeasonArchiveData(
+    val archives: List<SeasonArchiveItem>? = null,
+    val meta: SeasonMeta? = null
+)
+
+data class SeasonArchiveItem(
+    val bvid: String = "",
+    val title: String = "",
+    val pic: String = "",
+    val duration: Long = 0,
+    val pubdate: Long = 0,
+    val stat: VideoStat? = null
 )
 
 data class CommentList(

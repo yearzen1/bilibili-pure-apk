@@ -87,6 +87,23 @@ interface BilibiliApi {
         @Query("pn") page: Int = 1
     ): ApiResponse<UserSpaceData>
 
+    @GET("x/polymer/web-space/seasons_series_list")
+    suspend fun getSpaceSeasons(
+        @Query("mid") mid: Long,
+        @Query("page_num") pageNum: Int = 1,
+        @Query("page_size") pageSize: Int = 20,
+        @Query("web_location") webLocation: String = "333.1387"
+    ): ApiResponse<SpaceSeasonsData>
+
+    @GET("x/polymer/web-space/seasons_archives_list")
+    suspend fun getSeasonArchives(
+        @Query("mid") mid: Long,
+        @Query("season_id") seasonId: Long,
+        @Query("page_num") pageNum: Int = 1,
+        @Query("page_size") pageSize: Int = 20,
+        @Query("web_location") webLocation: String = "333.1387"
+    ): ApiResponse<SeasonArchiveData>
+
     @GET("x/player/playurl")
     suspend fun getPlayUrl(
         @Query("bvid") bvid: String,
@@ -330,7 +347,7 @@ interface BilibiliApi {
                     val orig = chain.request()
                     val url = orig.url.toString()
                     val isCdn = !url.contains("api.bilibili.com") && !url.contains("passport.bilibili.com")
-                    val isSpaceApi = !isCdn && url.contains("/x/space/") && !url.contains("acc/info")
+                    val isSpaceApi = !isCdn && ((url.contains("/x/space/") && !url.contains("acc/info")) || url.contains("/web-space/"))
                     val spaceOrigin = "https://space.bilibili.com"
                     val apiOrigin = "https://www.bilibili.com"
                     val builder = orig.newBuilder()
@@ -356,7 +373,7 @@ interface BilibiliApi {
                             .header("Sec-Fetch-Site", "same-site")
                     }
                     // WBI signing for endpoints that require w_rid/wts
-                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type"))) {
+                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type") || url.contains("seasons_archives_list") || url.contains("seasons_series_list"))) {
                         val httpUrl = url.toHttpUrlOrNull()
                         if (httpUrl != null) {
                             val params = mutableMapOf<String, String>()

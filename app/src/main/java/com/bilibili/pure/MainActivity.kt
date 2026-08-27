@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.bilibili.pure.ui.channel.ChannelScreen
-import com.bilibili.pure.ui.channel.ChannelSearchScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.downloads.DownloadsScreen
 import com.bilibili.pure.ui.favorites.FavoritesScreen
@@ -176,7 +175,8 @@ fun MainScreen(
                     onBack = { navController.popBackStack() },
                     onPlay = { b -> navController.navigate(Routes.player(b)) },
                     onUploaderClick = { mid -> navController.navigate(Routes.channel(mid)) },
-                    onUserClick = { mid -> navController.navigate(Routes.channel(mid)) }
+                    onUserClick = { mid -> navController.navigate(Routes.channel(mid)) },
+                    onCollectionVideoClick = { b -> navController.navigate(Routes.detail(b)) }
                 )
             }
 
@@ -292,28 +292,6 @@ fun MainScreen(
                 val mid = backStackEntry.arguments?.getLong("mid") ?: return@composable
                 ChannelScreen(
                     mid = mid,
-                    onBack = { navController.popBackStack() },
-                    onVideoClick = { bvid ->
-                        navController.navigate(Routes.detail(bvid))
-                    },
-                    onChannelSearch = { _mid, keyword ->
-                        navController.navigate(Routes.channelSearch(_mid, keyword))
-                    }
-                )
-            }
-
-            composable(
-                route = Routes.CHANNEL_SEARCH,
-                arguments = listOf(
-                    navArgument("mid") { type = NavType.LongType },
-                    navArgument("keyword") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) { backStackEntry ->
-                val mid = backStackEntry.arguments?.getLong("mid") ?: return@composable
-                val keyword = backStackEntry.arguments?.getString("keyword") ?: ""
-                ChannelSearchScreen(
-                    mid = mid,
-                    keyword = keyword,
                     onBack = { navController.popBackStack() },
                     onVideoClick = { bvid ->
                         navController.navigate(Routes.detail(bvid))
