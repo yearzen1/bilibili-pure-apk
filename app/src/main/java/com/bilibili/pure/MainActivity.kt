@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
+import com.bilibili.pure.ui.detail.NoteScreen
 import com.bilibili.pure.ui.downloads.DownloadsScreen
 import com.bilibili.pure.ui.favorites.FavoritesScreen
 import com.bilibili.pure.ui.following.FollowingListScreen
@@ -176,7 +177,8 @@ fun MainScreen(
                     onPlay = { b -> navController.navigate(Routes.player(b)) },
                     onUploaderClick = { mid -> navController.navigate(Routes.channel(mid)) },
                     onUserClick = { mid -> navController.navigate(Routes.channel(mid)) },
-                    onCollectionVideoClick = { b -> navController.navigate(Routes.detail(b)) }
+                    onCollectionVideoClick = { b -> navController.navigate(Routes.detail(b)) },
+                    onOpenNote = { cvid -> navController.navigate(Routes.note(cvid)) }
                 )
             }
 
@@ -281,6 +283,17 @@ fun MainScreen(
 
             composable(route = Routes.SETTINGS) {
                 SettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.NOTE,
+                arguments = listOf(navArgument("cvid") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val cvid = backStackEntry.arguments?.getString("cvid") ?: return@composable
+                NoteScreen(
+                    cvid = cvid,
                     onBack = { navController.popBackStack() }
                 )
             }

@@ -26,10 +26,14 @@ object Routes {
     const val FOLLOWING = "following"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
+    const val NOTE = "note/{cvid}"
 
     fun detail(bvid: String): String {
         if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")
         return "detail/$bvid"
+    }
+    fun note(cvid: String): String {
+        return "note/$cvid"
     }
     fun player(bvid: String, cid: Long? = null): String {
         if (bvid.isBlank()) throw IllegalArgumentException("BVID cannot be empty")

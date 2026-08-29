@@ -105,6 +105,7 @@ fun DetailScreen(
     onUploaderClick: (mid: Long) -> Unit = {},
     onUserClick: (mid: Long) -> Unit = {},
     onCollectionVideoClick: (bvid: String) -> Unit = {},
+    onOpenNote: (cvid: String) -> Unit = {},
     viewModel: DetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -225,6 +226,7 @@ fun DetailScreen(
             },
             onUploaderClick = onUploaderClick,
             onUserClick = onUserClick,
+            onOpenNote = onOpenNote,
             modifier = Modifier.padding(padding),
             replyThreads = uiState.replyThreads,
             expandedReplies = uiState.expandedReplies,
@@ -573,6 +575,7 @@ private fun DetailContent(
     onUploaderClick: (mid: Long) -> Unit = {},
     onUserClick: (mid: Long) -> Unit = {},
     modifier: Modifier = Modifier,
+    onOpenNote: (cvid: String) -> Unit = {},
     replyThreads: Map<Long, ReplyThread> = emptyMap(),
     expandedReplies: Set<Long> = emptySet(),
     onToggleReplies: (rpid: Long) -> Unit = {},
@@ -933,6 +936,7 @@ private fun DetailContent(
                                 isTogglingLike = comment.rpid in togglingLikes,
                                 onToggle = { onToggleReplies(rpid) },
                                 onUserClick = onUserClick,
+                                onOpenNote = onOpenNote,
                                 onToggleLike = {
                                     if (isLoggedIn) onToggleCommentLike(comment.rpid)
                                     else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
@@ -945,6 +949,7 @@ private fun DetailContent(
                                     ReplyRow(
                                         reply = reply,
                                         onUserClick = onUserClick,
+                                        onOpenNote = onOpenNote,
                                         isLiked = reply.action == 1,
                                         isTogglingLike = reply.rpid in togglingLikes,
                                         onToggleLike = {
@@ -982,6 +987,7 @@ private fun DetailContent(
                                 isTogglingLike = comment.rpid in togglingLikes,
                                 onToggle = { onToggleReplies(rpid) },
                                 onUserClick = onUserClick,
+                                onOpenNote = onOpenNote,
                                 onToggleLike = {
                                     if (isLoggedIn) onToggleCommentLike(comment.rpid)
                                     else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
@@ -995,6 +1001,7 @@ private fun DetailContent(
                                     ReplyRow(
                                         reply = reply,
                                         onUserClick = onUserClick,
+                                        onOpenNote = onOpenNote,
                                         isLiked = reply.action == 1,
                                         isTogglingLike = reply.rpid in togglingLikes,
                                         onToggleLike = {
@@ -1086,8 +1093,11 @@ private fun CommentCard(
     isTogglingLike: Boolean = false,
     onToggle: () -> Unit,
     onUserClick: (mid: Long) -> Unit = {},
+    onOpenNote: (cvid: String) -> Unit = {},
     onToggleLike: () -> Unit = {}
 ) {
+    val isNote = comment.isNoteComment()
+    val noteCvid = if (isNote) comment.getNoteCvid() else null
     DismissSelectionCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = if (comment.rcount > 0) ({ onToggle() }) else null,
@@ -1126,6 +1136,20 @@ private fun CommentCard(
                                 )
                             }
                         }
+                        if (isNote) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                contentColor = Color.White
+                            ) {
+                                Text(
+                                    text = "笔记",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = formatTimestamp(comment.ctime),
@@ -1136,7 +1160,7 @@ private fun CommentCard(
                     Spacer(modifier = Modifier.height(4.dp))
                     SelectionContainer {
                         CommentText(
-                            message = comment.content.message,
+                            message = comment.getNotePreview(),
                             emote = comment.content.emote,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -1161,6 +1185,15 @@ private fun CommentCard(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
+                        if (isNote && noteCvid != null) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "📒 查看笔记 >",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { onOpenNote(noteCvid) }
+                            )
+                        }
                         Spacer(modifier = Modifier.weight(1f))
                         CommentLikeButton(
                             liked = isLiked,
@@ -1179,10 +1212,13 @@ private fun CommentCard(
 private fun ReplyRow(
     reply: com.bilibili.pure.data.model.CommentItem,
     onUserClick: (mid: Long) -> Unit = {},
+    onOpenNote: (cvid: String) -> Unit = {},
     isLiked: Boolean = false,
     isTogglingLike: Boolean = false,
     onToggleLike: () -> Unit = {}
 ) {
+    val isNote = reply.isNoteComment()
+    val noteCvid = if (isNote) reply.getNoteCvid() else null
     Row(modifier = Modifier.padding(start = 32.dp)) {
         AsyncImage(
             model = fixPic(reply.member.avatar),
@@ -1208,13 +1244,24 @@ private fun ReplyRow(
             }
             SelectionContainer {
                 CommentText(
-                    message = reply.content.message,
+                    message = reply.getNotePreview(),
                     emote = reply.content.emote,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             reply.content.pictures?.let { pictures ->
                 CommentPicturesRow(pictures = pictures)
+            }
+            if (isNote && noteCvid != null) {
+                Text(
+                    text = "📒 查看笔记 >",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenNote(noteCvid) }
+                        .padding(top = 2.dp)
+                )
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

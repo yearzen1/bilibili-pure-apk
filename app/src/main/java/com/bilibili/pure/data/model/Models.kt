@@ -162,13 +162,57 @@ data class CommentItem(
     val like: Int = 0,
     val rcount: Int = 0,
     val ctime: Long = 0,
-    val action: Int = 0
+    val action: Int = 0,
+    @SerializedName("note_cvid") val noteCvid: Long = 0,
+    @SerializedName("note_cvid_str") val noteCvidStr: String = "",
+    @SerializedName("reply_control") val replyControl: CommentReplyControl? = null
+)
+
+data class CommentReplyControl(
+    @SerializedName("is_note") val isNote: Boolean? = null,
+    @SerializedName("is_note_v2") val isNoteV2: Boolean? = null,
+    @SerializedName("hide_note_icon") val hideNoteIcon: Boolean? = null
 )
 
 data class CommentContent(
     val message: String,
     @SerializedName("emote") val emote: Map<String, EmoteInfo>? = null,
-    val pictures: List<CommentPicture>? = null
+    val pictures: List<CommentPicture>? = null,
+    @SerializedName("jump_url") val jumpUrl: Map<String, CommentJumpUrl>? = null
+)
+
+data class CommentJumpUrl(
+    @SerializedName("pc_url") val pcUrl: String = "",
+    @SerializedName("app_url_schema") val appSchema: String = "",
+    val title: String = ""
+)
+
+data class NoteArticle(
+    val id: Long = 0,
+    val title: String = "",
+    val summary: String? = null,
+    @SerializedName("banner_url") val bannerUrl: String? = null,
+    val author: NoteArticleAuthor? = null,
+    val content: String = "",
+    @SerializedName("image_urls") val imageUrls: List<String>? = null,
+    @SerializedName("publish_time") val publishTime: Long = 0,
+    val stats: NoteArticleStats? = null,
+    val type: Int? = null
+)
+
+data class NoteArticleAuthor(
+    val mid: Long = 0,
+    val name: String = "",
+    val face: String = ""
+)
+
+data class NoteArticleStats(
+    val view: Int = 0,
+    val reply: Int = 0,
+    val like: Int = 0,
+    val share: Int = 0,
+    val coin: Int = 0,
+    val favorite: Int = 0
 )
 
 data class EmoteInfo(

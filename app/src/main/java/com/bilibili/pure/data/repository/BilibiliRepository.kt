@@ -40,6 +40,17 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getVideoInfo failed", it) }
     }
 
+    suspend fun getArticleView(cvid: Long): Result<NoteArticle> {
+        return runCatching {
+            val response = api.getArticleView(id = cvid)
+            if (response.code == 0) {
+                response.data ?: throw Exception("笔记不存在")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getArticleView failed", it) }
+    }
+
     suspend fun getHistory(page: Int = 1, pageSize: Int = 20): Result<List<HistoryItem>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getHistory: page=$page pageSize=$pageSize")
         return runCatching {

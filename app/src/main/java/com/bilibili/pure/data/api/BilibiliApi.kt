@@ -177,6 +177,13 @@ interface BilibiliApi {
     @GET("x/relation")
     suspend fun getRelation(@Query("fid") fid: Long): ApiResponse<RelationData>
 
+    @GET("x/article/view")
+    suspend fun getArticleView(
+        @Query("id") id: Long,
+        @Query("gaia_source") gaiaSource: String = "main_web",
+        @Query("web_location") webLocation: String = "333.976"
+    ): ApiResponse<NoteArticle>
+
     @GET("x/space/acc/info")
     suspend fun getSpaceAccInfo(@Query("mid") mid: Long): ApiResponse<SpaceAccInfo>
 
@@ -373,7 +380,7 @@ interface BilibiliApi {
                             .header("Sec-Fetch-Site", "same-site")
                     }
                     // WBI signing for endpoints that require w_rid/wts
-                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type") || url.contains("seasons_archives_list") || url.contains("seasons_series_list"))) {
+                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type") || url.contains("seasons_archives_list") || url.contains("seasons_series_list") || url.contains("article/view"))) {
                         val httpUrl = url.toHttpUrlOrNull()
                         if (httpUrl != null) {
                             val params = mutableMapOf<String, String>()
