@@ -1,11 +1,14 @@
 package com.bilibili.pure
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.local.AppSettings
@@ -55,6 +58,13 @@ class BilibiliApp : Application(), ImageLoaderFactory {
                     .directory(cacheDir.resolve("coil_cache"))
                     .maxSizeBytes(50 * 1024 * 1024)
                     .build()
+            }
+            .components {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
             }
             .okHttpClient { BilibiliApi.httpClient }
             .crossfade(true)

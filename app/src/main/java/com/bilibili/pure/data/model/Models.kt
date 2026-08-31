@@ -229,7 +229,8 @@ data class CommentPicture(
     @SerializedName("img_src") val imgSrc: String,
     @SerializedName("img_width") val imgWidth: Int,
     @SerializedName("img_height") val imgHeight: Int,
-    @SerializedName("img_size") val imgSize: Double
+    @SerializedName("img_size") val imgSize: Double,
+    @SerializedName("play_gif_thumbnail") val playGifThumbnail: Boolean = false
 )
 
 data class CommentMember(
