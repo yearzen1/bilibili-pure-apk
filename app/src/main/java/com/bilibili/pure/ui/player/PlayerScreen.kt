@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -70,6 +73,7 @@ fun PlayerScreen(
     var isFullscreen by remember { mutableStateOf(true) }
     var playing by remember { mutableStateOf(false) }
     var lastPreparedCid by remember { mutableStateOf<Long?>(null) }
+    var isWifi by remember { mutableStateOf(AppSettings.isWifiConnected(context)) }
 
     LaunchedEffect(bvid, startCid, source) {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: entering bvid=$bvid cid=$startCid source=$source")
@@ -158,6 +162,7 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         WifiMonitor.wifiLost.collect {
+            isWifi = false
             if (AppSettings.wifiOnlyPlayback && vm.uiState.value.localFiles.isEmpty() && player.playWhenReady) {
                 pausedByWifi.value = true
                 player.pause()
@@ -168,6 +173,7 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         WifiMonitor.wifiRestored.collect {
+            isWifi = true
             if (pausedByWifi.value) {
                 val seekMs = player.currentPosition.coerceAtLeast(0)
                 pausedByWifi.value = false
@@ -301,7 +307,8 @@ fun PlayerScreen(
                 isFullscreen = true,
                 onBack = onBack,
                 isPausedByWifi = { pausedByWifi.value },
-                onMobileResumePlayRequested = { confirmMobileResumePlay = true }
+                onMobileResumePlayRequested = { confirmMobileResumePlay = true },
+                isWifi = isWifi
             )
         }
     } else {
@@ -348,7 +355,8 @@ fun PlayerScreen(
                         isFullscreen = false,
                         onBack = onBack,
                         isPausedByWifi = { pausedByWifi.value },
-                        onMobileResumePlayRequested = { confirmMobileResumePlay = true }
+                        onMobileResumePlayRequested = { confirmMobileResumePlay = true },
+                        isWifi = isWifi
                     )
                 }
 
@@ -421,9 +429,14 @@ private fun PlayerContent(
     isFullscreen: Boolean,
     onBack: () -> Unit = {},
     isPausedByWifi: () -> Boolean = { false },
-    onMobileResumePlayRequested: () -> Unit = {}
+    onMobileResumePlayRequested: () -> Unit = {},
+    isWifi: Boolean = true
 ) {
     val context = LocalContext.current
+    val batteryLevel = remember {
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+        bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
     val controlBar = remember { PlayerControlBar(onQualitySelected) }
     var showBackButton by remember { mutableStateOf(true) }
     var showSpeedToast by remember { mutableStateOf(false) }
@@ -607,20 +620,62 @@ private fun PlayerContent(
         }
 
         if (isFullscreen && showBackButton) {
-            IconButton(
-                onClick = onBack,
+            Row(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50))
-                    .size(36.dp)
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回视频详情",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回视频详情",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isWifi) Icons.Filled.Wifi else Icons.Filled.SignalCellularAlt,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isWifi) "WiFi" else "流量",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "·",
+                        color = Color.White.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Filled.BatteryStd,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "$batteryLevel%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
 
