@@ -51,11 +51,12 @@ fun CommentText(
             val tag = "emote_${match.value}"
             appendInlineContent(tag, match.value)
             val em = if (info.meta?.size == 2) 2.2.em else 1.1.em
+            val align = if (info.meta?.size == 2) PlaceholderVerticalAlign.TextBottom else PlaceholderVerticalAlign.Center
             inlineContent[tag] = InlineTextContent(
                 placeholder = Placeholder(
                     width = em,
                     height = em,
-                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                    placeholderVerticalAlign = align
                 )
             ) { _ ->
                 AsyncImage(
