@@ -34,8 +34,10 @@ fun CommentText(
     }
     val emoteMap = emote!!
 
+    val hasLargeEmote = emoteMap.values.any { it.meta?.size == 2 }
     val resolvedStyle = style.copy(
-        color = if (style.color == Color.Unspecified) LocalContentColor.current else style.color
+        color = if (style.color == Color.Unspecified) LocalContentColor.current else style.color,
+        lineHeight = if (hasLargeEmote) 3.0.em else style.lineHeight
     )
     val inlineContent = mutableMapOf<String, InlineTextContent>()
     val annotated = buildAnnotatedString {
@@ -51,12 +53,11 @@ fun CommentText(
             val tag = "emote_${match.value}"
             appendInlineContent(tag, match.value)
             val em = if (info.meta?.size == 2) 2.2.em else 1.1.em
-            val align = if (info.meta?.size == 2) PlaceholderVerticalAlign.TextBottom else PlaceholderVerticalAlign.Center
             inlineContent[tag] = InlineTextContent(
                 placeholder = Placeholder(
                     width = em,
                     height = em,
-                    placeholderVerticalAlign = align
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                 )
             ) { _ ->
                 AsyncImage(
