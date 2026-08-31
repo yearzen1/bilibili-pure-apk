@@ -8,8 +8,10 @@ import com.bilibili.pure.data.model.*
 import okhttp3.ConnectionSpec
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Response
 import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -334,6 +336,47 @@ interface BilibiliApi {
             return "$queryParts&w_rid=$wRid"
         }
 
+        private class RateLimitInterceptor : Interceptor {
+            @Volatile private var lastRequestAt = 0L
+            override fun intercept(chain: Interceptor.Chain): Response {
+                val url = chain.request().url.toString()
+                val isApi = url.contains("api.bilibili.com") || url.contains("passport.bilibili.com")
+                if (isApi) {
+                    val elapsed = System.currentTimeMillis() - lastRequestAt
+                    val wait = MIN_API_INTERVAL_MS - elapsed
+                    if (wait > 0) {
+                        try { Thread.sleep(wait) } catch (_: InterruptedException) {}
+                    }
+                }
+                val response = chain.proceed(chain.request())
+                if (isApi) lastRequestAt = System.currentTimeMillis()
+                return response
+            }
+            companion object {
+                private const val MIN_API_INTERVAL_MS = 300L
+            }
+        }
+
+        private class RetryInterceptor : Interceptor {
+            override fun intercept(chain: Interceptor.Chain): Response {
+                var response = chain.proceed(chain.request())
+                var retryCount = 0
+                while (retryCount < MAX_RETRIES && (response.code == 429 || response.code == 412)) {
+                    response.close()
+                    val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                    val backoff = retryAfter ?: ((1L shl retryCount) * if (response.code == 412) 2000L else 1000L)
+                    if (BuildConfig.DEBUG) Log.w(BilibiliApp.TAG, "HTTP ${response.code} retry ${retryCount + 1}/$MAX_RETRIES, wait ${backoff}ms")
+                    try { Thread.sleep(backoff) } catch (_: InterruptedException) {}
+                    response = chain.proceed(chain.request())
+                    retryCount++
+                }
+                return response
+            }
+            companion object {
+                private const val MAX_RETRIES = 3
+            }
+        }
+
         val httpClient: OkHttpClient by lazy {
             val logging = HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
@@ -402,6 +445,8 @@ interface BilibiliApi {
                     }
                     chain.proceed(builder.build())
                 }
+                .addInterceptor(RateLimitInterceptor())
+                .addInterceptor(RetryInterceptor())
                 .addInterceptor(logging)
                 .build()
         }
