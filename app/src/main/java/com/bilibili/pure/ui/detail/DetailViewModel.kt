@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentItem
+import com.bilibili.pure.data.model.SeasonArchiveItem
+import com.bilibili.pure.data.model.SeasonMeta
 import com.bilibili.pure.data.model.UgcSeason
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
@@ -45,7 +47,14 @@ data class DetailUiState(
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
     private val defaultFolderId: Long? = null,
-    val ugcSeason: UgcSeason? = null
+    val ugcSeason: UgcSeason? = null,
+    // Collection pagination state
+    val collectionEpisodes: List<SeasonArchiveItem> = emptyList(),
+    val collectionMeta: SeasonMeta? = null,
+    val collectionPage: Int = 1,
+    val collectionHasMore: Boolean = true,
+    val collectionLoadingMore: Boolean = false,
+    val collectionSortDesc: Boolean = true
 ) {
     fun getDefaultFolderId() = defaultFolderId
     fun withDefaultFolderId(id: Long) = copy(defaultFolderId = id)
@@ -402,5 +411,67 @@ class DetailViewModel(
                     )
                 }
         }
+    }
+
+    // --- Collection pagination ---
+
+    fun loadCollectionEpisodes(mid: Long, seasonId: Long, sortDesc: Boolean = true) {
+        val state = _uiState.value
+        if (state.collectionEpisodes.isNotEmpty() && state.collectionSortDesc == sortDesc) return
+        _uiState.value = state.copy(
+            collectionEpisodes = emptyList(),
+            collectionPage = 1,
+            collectionHasMore = true,
+            collectionLoadingMore = true,
+            collectionSortDesc = sortDesc
+        )
+        viewModelScope.launch {
+            repository.getSeasonArchives(mid = mid, seasonId = seasonId, pageNum = 1, sortReverse = sortDesc)
+                .onSuccess { data ->
+                    val archives = data.archives ?: emptyList()
+                    val meta = data.meta
+                    _uiState.value = _uiState.value.copy(
+                        collectionEpisodes = archives,
+                        collectionMeta = meta,
+                        collectionPage = 1,
+                        collectionHasMore = archives.size >= 20,
+                        collectionLoadingMore = false
+                    )
+                    Log.d(BilibiliApp.TAG, "collection loaded: ${archives.size} episodes, meta=${meta?.name}")
+                }
+                .onFailure {
+                    Log.e(BilibiliApp.TAG, "loadCollectionEpisodes failed", it)
+                    _uiState.value = _uiState.value.copy(collectionLoadingMore = false)
+                }
+        }
+    }
+
+    fun loadMoreCollectionEpisodes(mid: Long, seasonId: Long) {
+        val state = _uiState.value
+        if (state.collectionLoadingMore || !state.collectionHasMore) return
+        val nextPage = state.collectionPage + 1
+        _uiState.value = state.copy(collectionLoadingMore = true)
+        viewModelScope.launch {
+            repository.getSeasonArchives(mid = mid, seasonId = seasonId, pageNum = nextPage, sortReverse = state.collectionSortDesc)
+                .onSuccess { data ->
+                    val archives = data.archives ?: emptyList()
+                    _uiState.value = _uiState.value.copy(
+                        collectionEpisodes = _uiState.value.collectionEpisodes + archives,
+                        collectionPage = nextPage,
+                        collectionHasMore = archives.size >= 20,
+                        collectionLoadingMore = false
+                    )
+                    Log.d(BilibiliApp.TAG, "more collection loaded: +${archives.size} episodes, page=$nextPage")
+                }
+                .onFailure {
+                    Log.e(BilibiliApp.TAG, "loadMoreCollectionEpisodes failed", it)
+                    _uiState.value = _uiState.value.copy(collectionLoadingMore = false)
+                }
+        }
+    }
+
+    fun toggleCollectionSort(mid: Long, seasonId: Long) {
+        val newSortDesc = !_uiState.value.collectionSortDesc
+        loadCollectionEpisodes(mid, seasonId, sortDesc = newSortDesc)
     }
 }

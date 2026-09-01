@@ -16,11 +16,14 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.core.SnapSpec
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
 import com.bilibili.pure.data.model.UgcSeason
+import com.bilibili.pure.data.model.SeasonArchiveItem
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -256,6 +261,14 @@ fun DetailScreen(
                 }
             },
             ugcSeason = uiState.ugcSeason,
+            collectionEpisodes = uiState.collectionEpisodes,
+            collectionMeta = uiState.collectionMeta,
+            collectionHasMore = uiState.collectionHasMore,
+            collectionLoadingMore = uiState.collectionLoadingMore,
+            collectionSortDesc = uiState.collectionSortDesc,
+            onLoadCollection = { mid, seasonId -> viewModel.loadCollectionEpisodes(mid, seasonId) },
+            onLoadMoreCollection = { mid, seasonId -> viewModel.loadMoreCollectionEpisodes(mid, seasonId) },
+            onToggleCollectionSort = { mid, seasonId -> viewModel.toggleCollectionSort(mid, seasonId) },
             onCollectionVideoClick = onCollectionVideoClick
         )
     }
@@ -598,11 +611,18 @@ private fun DetailContent(
     onFollowUploader: (mid: Long) -> Unit = {},
     onDownload: () -> Unit = {},
     ugcSeason: UgcSeason? = null,
+    collectionEpisodes: List<SeasonArchiveItem> = emptyList(),
+    collectionMeta: com.bilibili.pure.data.model.SeasonMeta? = null,
+    collectionHasMore: Boolean = true,
+    collectionLoadingMore: Boolean = false,
+    collectionSortDesc: Boolean = true,
+    onLoadCollection: (mid: Long, seasonId: Long) -> Unit = { _, _ -> },
+    onLoadMoreCollection: (mid: Long, seasonId: Long) -> Unit = { _, _ -> },
+    onToggleCollectionSort: (mid: Long, seasonId: Long) -> Unit = { _, _ -> },
     onCollectionVideoClick: (bvid: String) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
-    var collectionExpanded by remember { mutableStateOf(false) }
 
     val nearBottom by remember {
         derivedStateOf {
@@ -799,89 +819,74 @@ private fun DetailContent(
 
                 if (ugcSeason != null) {
                     item(key = "ugc_season") {
-                        val episodes = ugcSeason.sections?.flatMap { it.episodes ?: emptyList() } ?: emptyList()
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { collectionExpanded = !collectionExpanded },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Outlined.PlaylistPlay,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "合集：${ugcSeason.title}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        if (episodes.isNotEmpty()) {
-                                            Text(
-                                                text = "共 ${episodes.size} 集",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                        val totalEpisodes = collectionMeta?.total
+                            ?: ugcSeason.sections?.sumOf { it.episodes?.size ?: 0 } ?: 0
+                        val mid = videoInfo?.owner?.mid
+                        val seasonId = ugcSeason.id
+
+                        var showCollectionSheet by remember { mutableStateOf(false) }
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (mid != null && seasonId > 0) {
+                                        showCollectionSheet = true
                                     }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        if (collectionExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                                        contentDescription = if (collectionExpanded) "收起合集" else "展开合集"
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "合集：${ugcSeason.title}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (totalEpisodes > 0) {
+                                    Text(
+                                        text = "${totalEpisodes}集",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                if (collectionExpanded) {
-                                    Column {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        if (episodes.isEmpty()) {
-                                            Text(
-                                                text = "（暂无分集）",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        } else {
-                                            episodes.forEach { ep ->
-                                                val isCurrent = ep.bvid == videoInfo.bvid
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable(enabled = !isCurrent) {
-                                                            if (!isCurrent && ep.bvid.isNotBlank()) {
-                                                                onCollectionVideoClick(ep.bvid)
-                                                            }
-                                                        }
-                                                        .padding(vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    if (isCurrent) {
-                                                        Icon(
-                                                            Icons.Filled.PlayArrow,
-                                                            contentDescription = "当前播放",
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(20.dp)
-                                                        )
-                                                    } else {
-                                                        Spacer(modifier = Modifier.size(20.dp))
-                                                    }
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = ep.title.ifBlank { "P${ep.page?.page ?: 1}" },
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                                        else MaterialTheme.colorScheme.onSurface,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                }
-                                            }
-                                        }
+                            }
+                        }
+
+                        if (showCollectionSheet && mid != null && seasonId > 0) {
+                            CollectionBottomSheet(
+                                seasonTitle = ugcSeason.title,
+                                episodes = collectionEpisodes,
+                                currentBvid = videoInfo?.bvid ?: "",
+                                sortDesc = collectionSortDesc,
+                                hasMore = collectionHasMore,
+                                loadingMore = collectionLoadingMore,
+                                onDismiss = { showCollectionSheet = false },
+                                onSortToggle = { onToggleCollectionSort(mid, seasonId) },
+                                onLoadMore = { onLoadMoreCollection(mid, seasonId) },
+                                onEpisodeClick = { bvid ->
+                                    showCollectionSheet = false
+                                    if (bvid.isNotBlank() && bvid != videoInfo?.bvid) {
+                                        onCollectionVideoClick(bvid)
                                     }
+                                }
+                            )
+
+                            // Load collection when sheet opens and no data yet
+                            LaunchedEffect(seasonId) {
+                                if (collectionEpisodes.isEmpty()) {
+                                    onLoadCollection(mid, seasonId)
                                 }
                             }
                         }
@@ -1548,5 +1553,209 @@ private fun StatChip(label: String, value: String) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CollectionBottomSheet(
+    seasonTitle: String,
+    episodes: List<SeasonArchiveItem>,
+    currentBvid: String,
+    sortDesc: Boolean,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onDismiss: () -> Unit,
+    onSortToggle: () -> Unit,
+    onLoadMore: () -> Unit,
+    onEpisodeClick: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = screenHeight * 0.6f)
+        ) {
+            // Title bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "合集：$seasonTitle",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // Sort toggle button with text
+                TextButton(onClick = onSortToggle) {
+                    Icon(
+                        if (sortDesc) Icons.Outlined.ArrowDownward else Icons.Outlined.ArrowUpward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (sortDesc) "最新" else "最旧")
+                }
+            }
+
+            HorizontalDivider()
+
+            // Episode list
+            if (episodes.isEmpty() && loadingMore) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            } else if (episodes.isEmpty()) {
+                Text(
+                    text = "（暂无分集）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                val listState = rememberLazyListState()
+
+                // Auto-load more when near bottom
+                LaunchedEffect(listState) {
+                    snapshotFlow {
+                        val layoutInfo = listState.layoutInfo
+                        val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        val total = layoutInfo.totalItemsCount
+                        total > 0 && lastVisible >= total - 3
+                    }.collect { nearEnd ->
+                        if (nearEnd && hasMore && !loadingMore) {
+                            onLoadMore()
+                        }
+                    }
+                }
+
+                LazyColumn(state = listState) {
+                    items(
+                        count = episodes.size,
+                        key = { episodes[it].bvid }
+                    ) { index ->
+                        val item = episodes[index]
+                        BottomSheetEpisodeRow(
+                            item = item,
+                            isCurrent = item.bvid == currentBvid,
+                            onClick = { onEpisodeClick(item.bvid) }
+                        )
+                    }
+                    if (loadingMore) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomSheetEpisodeRow(
+    item: SeasonArchiveItem,
+    isCurrent: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isCurrent) { onClick() }
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Cover image with duration badge
+        val coverUrl = item.pic.let { pic ->
+            when {
+                pic.startsWith("//") -> "https:$pic"
+                pic.startsWith("http://") -> "https:${pic.removePrefix("http:")}"
+                else -> pic
+            }
+        }
+        if (coverUrl.isNotBlank()) {
+            Box {
+                AsyncImage(
+                    model = coverUrl,
+                    contentDescription = item.title,
+                    modifier = Modifier
+                        .size(width = 120.dp, height = 68.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                val duration = item.duration
+                if (duration > 0) {
+                    Text(
+                        text = formatDuration(duration),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(topStart = 4.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+            }
+        } else {
+            if (isCurrent) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "当前播放",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                Spacer(modifier = Modifier.size(20.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title.ifBlank { item.bvid },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "${formatCount(item.stat?.view ?: 0)}播放",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (item.pubdate > 0) {
+                    Text(
+                        text = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.pubdate * 1000)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
