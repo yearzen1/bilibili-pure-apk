@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
 import android.media.AudioManager
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -437,6 +438,14 @@ private fun PlayerContent(
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
         bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
     }
+    val timeFormat = remember { DateFormat.getTimeFormat(context) }
+    var currentTime by remember { mutableStateOf(timeFormat.format(System.currentTimeMillis())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000L)
+            currentTime = timeFormat.format(System.currentTimeMillis())
+        }
+    }
     val controlBar = remember { PlayerControlBar(onQualitySelected) }
     var showBackButton by remember { mutableStateOf(true) }
     var showSpeedToast by remember { mutableStateOf(false) }
@@ -620,18 +629,18 @@ private fun PlayerContent(
         }
 
         if (isFullscreen && showBackButton) {
-            Row(
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(36.dp)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -640,9 +649,17 @@ private fun PlayerContent(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+                Text(
+                    text = currentTime,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.Center)
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = 4.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp)
                 ) {
                     Icon(
                         imageVector = if (isWifi) Icons.Filled.Wifi else Icons.Filled.SignalCellularAlt,

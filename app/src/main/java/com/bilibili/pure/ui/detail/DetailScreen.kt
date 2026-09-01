@@ -1145,7 +1145,7 @@ private fun CommentCard(
                             Spacer(modifier = Modifier.width(4.dp))
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.tertiary,
+                                color = MaterialTheme.colorScheme.primary,
                                 contentColor = Color.White
                             ) {
                                 Text(
