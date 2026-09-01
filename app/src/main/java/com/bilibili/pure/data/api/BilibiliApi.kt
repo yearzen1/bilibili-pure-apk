@@ -103,6 +103,7 @@ interface BilibiliApi {
         @Query("season_id") seasonId: Long,
         @Query("page_num") pageNum: Int = 1,
         @Query("page_size") pageSize: Int = 20,
+        @Query("sort_reverse") sortReverse: Boolean? = null,
         @Query("web_location") webLocation: String = "333.1387"
     ): ApiResponse<SeasonArchiveData>
 
@@ -404,9 +405,21 @@ interface BilibiliApi {
                         .header("Referer", if (isSpaceApi) "$spaceOrigin/" else "$apiOrigin/")
                     if (isCdn) {
                         builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    } else if (isSpaceApi) {
+                        // Space APIs: Safari desktop UA (like PiliPlus), no sec-ch-ua headers
+                        builder.header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15")
+                            .header("Origin", spaceOrigin)
+                            .header("Cookie", buildString {
+                                append("buvid3=$buvid3; buvid4=$buvid3")
+                                if (loginCookies.isNotEmpty()) {
+                                    append("; $loginCookies")
+                                }
+                            })
+                            .header("Accept", "application/json, text/plain, */*")
+                            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                     } else {
-                        builder.header("User-Agent", if (isSpaceApi) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" else "Mozilla/5.0 (Linux; Android ${Build.VERSION.SDK_INT}; ${Build.MANUFACTURER} ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                            .header("Origin", if (isSpaceApi) spaceOrigin else apiOrigin)
+                        builder.header("User-Agent", "Mozilla/5.0 (Linux; Android ${Build.VERSION.SDK_INT}; ${Build.MANUFACTURER} ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                            .header("Origin", apiOrigin)
                             .header("Cookie", buildString {
                                 append("buvid3=$buvid3; buvid4=$buvid3")
                                 if (loginCookies.isNotEmpty()) {
@@ -416,14 +429,15 @@ interface BilibiliApi {
                             .header("Accept", "application/json, text/plain, */*")
                             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                             .header("sec-ch-ua", "\"Google Chrome\";v=\"120\", \"Not?A_Brand\";v=\"8\"")
-                            .header("sec-ch-ua-mobile", if (isSpaceApi) "?0" else "?1")
-                            .header("sec-ch-ua-platform", if (isSpaceApi) "\"Windows\"" else "\"Android\"")
+                            .header("sec-ch-ua-mobile", "?1")
+                            .header("sec-ch-ua-platform", "\"Android\"")
                             .header("Sec-Fetch-Dest", "empty")
                             .header("Sec-Fetch-Mode", "cors")
                             .header("Sec-Fetch-Site", "same-site")
                     }
                     // WBI signing for endpoints that require w_rid/wts
-                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type") || url.contains("seasons_archives_list") || url.contains("seasons_series_list") || url.contains("article/view"))) {
+                    // Note: seasons_archives_list does NOT need WBI (verified via PiliPlus)
+                    if (!isCdn && (url.contains("/wbi/") || url.contains("search/type") || url.contains("seasons_series_list") || url.contains("article/view"))) {
                         val httpUrl = url.toHttpUrlOrNull()
                         if (httpUrl != null) {
                             val params = mutableMapOf<String, String>()

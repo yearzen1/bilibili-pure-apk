@@ -139,18 +139,17 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getSpaceSeasons failed", it) }
     }
 
-    suspend fun getSeasonArchives(mid: Long, seasonId: Long, pageNum: Int = 1): Result<SeasonArchiveData> {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchives: mid=$mid seasonId=$seasonId pageNum=$pageNum")
+    suspend fun getSeasonArchives(mid: Long, seasonId: Long, pageNum: Int = 1, sortReverse: Boolean? = null): Result<SeasonArchiveData> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchives: mid=$mid seasonId=$seasonId pageNum=$pageNum sortReverse=$sortReverse")
         return runCatching {
-            val response = api.getSeasonArchives(mid = mid, seasonId = seasonId, pageNum = pageNum)
+            val response = api.getSeasonArchives(mid = mid, seasonId = seasonId, pageNum = pageNum, sortReverse = sortReverse)
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchives response: code=${response.code} msg=${response.message}")
             if (response.code == 0) response.data ?: throw Exception("No data")
             else throw Exception(response.message)
         }.onFailure { Log.e(BilibiliApp.TAG, "getSeasonArchives failed", it) }
     }
 
-    // 合集视频列表：绕过 gaia 风控(-352) 的 seasons_archives_list，
-    // 改用视频 view 接口的 ugc_season.sections[].episodes（完整分集，无需 gaia）。
+    // 合集视频列表：使用 seasons_archives_list API（已验证无需 WBI 签名，Safari UA 可通过）
     suspend fun getSeasonArchivesViaView(bvid: String): Result<Pair<List<SeasonArchiveItem>, SeasonMeta?>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSeasonArchivesViaView: bvid=$bvid")
         return runCatching {
