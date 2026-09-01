@@ -24,6 +24,9 @@ import retrofit2.http.Query
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 interface BilibiliApi {
 
@@ -193,6 +196,12 @@ interface BilibiliApi {
     @GET("x/web-interface/nav")
     suspend fun getNavInfo(): ApiResponse<NavInfo>
 
+    @FormUrlEncoded
+    @POST("x/internal/gaia-gateway/ExClimbWuzhi")
+    suspend fun activateBuvid(
+        @Field("payload") payload: String
+    ): ApiResponse<Any>
+
     @GET("x/web-interface/card")
     suspend fun getUserCard(@Query("mid") mid: Long): ApiResponse<UserCardData>
 
@@ -228,6 +237,30 @@ interface BilibiliApi {
                 } catch (_: Exception) {}
             }
             return null
+        }
+
+        private var buvidActivated = false
+
+        fun activateBuvidIfNeeded(scope: CoroutineScope) {
+            if (buvidActivated || buvid3.isBlank()) return
+            buvidActivated = true
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val randBytes = List(50) { ('0'..'9').random() }
+                    val payload = org.json.JSONObject().apply {
+                        put("3064", 1)
+                        put("39c8", "333.1387.fp.risk")
+                        put("3c43", org.json.JSONObject().apply {
+                            put("adca", "Linux")
+                            put("bfe9", randBytes.joinToString("").takeLast(50))
+                        })
+                    }
+                    val response = create().activateBuvid(payload.toString())
+                    if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "buvid activated: code=${response.code}")
+                } catch (e: Exception) {
+                    if (BuildConfig.DEBUG) Log.w(BilibiliApp.TAG, "buvid activation failed", e)
+                }
+            }
         }
 
         private fun fetchWbiKeys(): Pair<String, String>? {
@@ -428,12 +461,6 @@ interface BilibiliApi {
                             })
                             .header("Accept", "application/json, text/plain, */*")
                             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                            .header("sec-ch-ua", "\"Google Chrome\";v=\"120\", \"Not?A_Brand\";v=\"8\"")
-                            .header("sec-ch-ua-mobile", "?1")
-                            .header("sec-ch-ua-platform", "\"Android\"")
-                            .header("Sec-Fetch-Dest", "empty")
-                            .header("Sec-Fetch-Mode", "cors")
-                            .header("Sec-Fetch-Site", "same-site")
                     }
                     // WBI signing for endpoints that require w_rid/wts
                     // Note: seasons_archives_list does NOT need WBI (verified via PiliPlus)

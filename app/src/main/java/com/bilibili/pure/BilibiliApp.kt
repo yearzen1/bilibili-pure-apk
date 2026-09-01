@@ -30,6 +30,7 @@ class BilibiliApp : Application(), ImageLoaderFactory {
             prefs.edit().putString("buvid3", UUID.randomUUID().toString()).apply()
         }
         BilibiliApi.buvid3 = prefs.getString("buvid3", "")!!
+        BilibiliApi.activateBuvidIfNeeded(appScope)
         val sessdata = prefs.getString("sessdata", null)
         val biliJct = prefs.getString("bili_jct", null)
         val dedeUserId = prefs.getString("dede_userid", null)
