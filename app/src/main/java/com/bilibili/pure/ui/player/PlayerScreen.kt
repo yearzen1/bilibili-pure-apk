@@ -553,11 +553,19 @@ private fun PlayerContent(
                                 }
                             )
 
+                            val statusBarHeight = run {
+                                val resourceId = ctx.resources.getIdentifier("status_bar_height", "dimen", "android")
+                                if (resourceId > 0) ctx.resources.getDimensionPixelSize(resourceId) else 0
+                            }
+
                             view.setOnTouchListener { _, event ->
                                 gestureDetector.onTouchEvent(event)
 
                                 when (event.actionMasked) {
                                     MotionEvent.ACTION_DOWN -> {
+                                        if (event.y < statusBarHeight) {
+                                            return@setOnTouchListener false
+                                        }
                                         touchStartX = event.x
                                         touchStartY = event.y
                                         val w = view.width
