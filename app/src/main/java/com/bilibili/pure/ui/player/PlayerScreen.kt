@@ -460,6 +460,14 @@ private fun PlayerContent(
     var brightnessOverlayValue by remember { mutableStateOf(0.5f) }
     var volumeOverlayValue by remember { mutableStateOf(0.5f) }
     var overlayDismissKey by remember { mutableStateOf(0) }
+    var observedPositionMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(player.isPlaying) {
+        while (player.isPlaying) {
+            observedPositionMs = player.currentPosition
+            delay(100)
+        }
+    }
 
     LaunchedEffect(speedCtl.effectiveSpeed) {
         if (speedCtl.effectiveSpeed == 1.0f && !showSpeedToast) return@LaunchedEffect
@@ -727,7 +735,7 @@ private fun PlayerContent(
 
         SubtitleOverlay(
             cues = uiState.subtitleCues,
-            currentPositionMs = player.currentPosition,
+            currentPositionMs = observedPositionMs,
             offsetX = uiState.subtitleOffsetX,
             offsetY = uiState.subtitleOffsetY,
             onPositionChanged = onSubtitlePositionChanged,

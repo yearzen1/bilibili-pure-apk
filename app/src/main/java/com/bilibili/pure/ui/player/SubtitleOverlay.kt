@@ -79,8 +79,16 @@ fun SubtitleOverlay(
 
             LaunchedEffect(boxSize) {
                 if (boxSize.width > 0 && boxSize.height > 0) {
-                    dragOffsetX = dragOffsetX.coerceIn(currentMinX, currentMaxX)
-                    dragOffsetY = dragOffsetY.coerceIn(currentMinY, currentMaxY)
+                    if (currentMinX <= currentMaxX) {
+                        dragOffsetX = dragOffsetX.coerceIn(currentMinX, currentMaxX)
+                    } else {
+                        dragOffsetX = 0f
+                    }
+                    if (currentMinY <= currentMaxY) {
+                        dragOffsetY = dragOffsetY.coerceIn(currentMinY, currentMaxY)
+                    } else {
+                        dragOffsetY = 0f
+                    }
                 }
             }
 
