@@ -547,7 +547,15 @@ private fun PlayerContent(
 
                                     override fun onDoubleTap(e: MotionEvent): Boolean {
                                         val p = exoPlayer as? ExoPlayer ?: return true
-                                        if (p.isPlaying) p.pause() else p.play()
+                                        if (p.isPlaying) {
+                                            p.pause()
+                                        } else {
+                                            if (AppSettings.wifiOnlyPlayback && isPausedByWifi() && !AppSettings.isWifiConnected(ctx)) {
+                                                onMobileResumePlayRequested()
+                                            } else {
+                                                p.play()
+                                            }
+                                        }
                                         return true
                                     }
                                 }
