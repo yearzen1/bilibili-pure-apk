@@ -7,8 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.local.PlaybackProgressManager
+import com.bilibili.pure.data.local.SubtitlePreference
+import com.bilibili.pure.data.local.SubtitlePreferenceManager
 import com.bilibili.pure.data.model.*
-import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +45,9 @@ data class PlayerUiState(
 class PlayerViewModel(
     private val repository: BilibiliRepository = BilibiliRepository(),
     private val playbackProgressManager: PlaybackProgressManager = PlaybackProgressManager(
+        BilibiliApp.instance.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
+    ),
+    private val subtitlePreferenceManager: SubtitlePreferenceManager = SubtitlePreferenceManager(
         BilibiliApp.instance.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
     )
 ) : ViewModel() {
@@ -263,6 +267,20 @@ class PlayerViewModel(
                         compareBy<SubtitleTrack> { it.type }.thenBy { it.lan }
                     )
                     _uiState.value = _uiState.value.copy(availableSubtitles = sortedTracks)
+
+                    val saved = subtitlePreferenceManager.load(aid, cid)
+                    if (saved != null) {
+                        _uiState.value = _uiState.value.copy(
+                            subtitleOffsetX = saved.offsetX,
+                            subtitleOffsetY = saved.offsetY
+                        )
+                        if (saved.enabled && saved.lan.isNotBlank()) {
+                            val matched = sortedTracks.find { it.lan == saved.lan }
+                            if (matched != null) {
+                                selectSubtitle(matched)
+                            }
+                        }
+                    }
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "loadSubtitles failed", e)
@@ -272,6 +290,7 @@ class PlayerViewModel(
 
     fun selectSubtitle(track: SubtitleTrack?) {
         val aid = _uiState.value.videoInfo?.aid ?: return
+        val cid = _uiState.value.currentPage?.cid ?: return
         Log.d(BilibiliApp.TAG, "selectSubtitle: ${track?.lanDoc}")
 
         if (track == null) {
@@ -280,6 +299,11 @@ class PlayerViewModel(
                 subtitleCues = emptyList(),
                 subtitleEnabled = false
             )
+            subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+                lan = "", enabled = false,
+                offsetX = _uiState.value.subtitleOffsetX,
+                offsetY = _uiState.value.subtitleOffsetY
+            ))
             return
         }
 
@@ -287,6 +311,11 @@ class PlayerViewModel(
             currentSubtitle = track,
             subtitleEnabled = true
         )
+        subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+            lan = track.lan, enabled = true,
+            offsetX = _uiState.value.subtitleOffsetX,
+            offsetY = _uiState.value.subtitleOffsetY
+        ))
 
         viewModelScope.launch {
             repository.getSubtitleContent(track.subtitleUrl)
@@ -301,6 +330,8 @@ class PlayerViewModel(
     }
 
     fun toggleSubtitle() {
+        val aid = _uiState.value.videoInfo?.aid ?: return
+        val cid = _uiState.value.currentPage?.cid ?: return
         val current = _uiState.value.currentSubtitle
         val enabled = _uiState.value.subtitleEnabled
 
@@ -310,24 +341,32 @@ class PlayerViewModel(
                 selectSubtitle(firstTrack)
             }
         } else {
-            _uiState.value = _uiState.value.copy(subtitleEnabled = !enabled)
+            val newEnabled = !enabled
+            _uiState.value = _uiState.value.copy(subtitleEnabled = newEnabled)
+            subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+                lan = current.lan, enabled = newEnabled,
+                offsetX = _uiState.value.subtitleOffsetX,
+                offsetY = _uiState.value.subtitleOffsetY
+            ))
         }
     }
 
     fun updateSubtitlePosition(offsetX: Float, offsetY: Float) {
+        val aid = _uiState.value.videoInfo?.aid
+        val cid = _uiState.value.currentPage?.cid
         _uiState.value = _uiState.value.copy(
             subtitleOffsetX = offsetX,
             subtitleOffsetY = offsetY
         )
-        AppSettings.subtitleOffsetX = offsetX
-        AppSettings.subtitleOffsetY = offsetY
+        if (aid != null && cid != null) {
+            val current = _uiState.value.currentSubtitle
+            subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+                lan = current?.lan ?: "",
+                enabled = _uiState.value.subtitleEnabled,
+                offsetX = offsetX,
+                offsetY = offsetY
+            ))
+        }
     }
 
-    init {
-        _uiState.value = _uiState.value.copy(
-            subtitleOffsetX = AppSettings.subtitleOffsetX,
-            subtitleOffsetY = AppSettings.subtitleOffsetY,
-            subtitleEnabled = AppSettings.subtitleEnabled
-        )
-    }
 }
