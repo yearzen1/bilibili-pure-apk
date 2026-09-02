@@ -84,6 +84,13 @@ interface BilibiliApi {
         @Query("ps") pageSize: Int = 20
     ): ApiResponse<List<HistoryItem>>
 
+    @GET("x/web-interface/history/search")
+    suspend fun searchHistory(
+        @Query("keyword") keyword: String,
+        @Query("pn") page: Int = 1,
+        @Query("business") business: String = "all"
+    ): ApiResponse<HistorySearchData>
+
     @GET("x/space/wbi/arc/search")
     suspend fun getUserVideos(
         @Query("mid") mid: Long,

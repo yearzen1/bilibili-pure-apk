@@ -342,7 +342,7 @@ data class HistoryItem(
     val bvid: String,
     val aid: Long,
     val title: String,
-    val pic: String,
+    val pic: String? = null,
     val owner: VideoOwner,
     val stat: VideoStat,
     val duration: Long,
@@ -351,6 +351,32 @@ data class HistoryItem(
     val cid: Long = 0,
     val page: HistoryPage? = null,
     val videos: Int = 1
+)
+
+data class HistorySearchData(
+    val list: List<HistorySearchItem> = emptyList(),
+    val cursor: Any? = null
+)
+
+data class HistorySearchItem(
+    val title: String = "",
+    val cover: String? = null,
+    @SerializedName("author_name") val authorName: String = "",
+    @SerializedName("author_face") val authorFace: String? = null,
+    @SerializedName("author_mid") val authorMid: Long = 0,
+    val history: SearchHistoryInfo? = null,
+    val videos: Int = 1,
+    val duration: Long = 0,
+    val progress: Long = 0,
+    @SerializedName("view_at") val viewAt: Long = 0
+)
+
+data class SearchHistoryInfo(
+    val oid: Long = 0,
+    val bvid: String = "",
+    val page: Int = 1,
+    val cid: Long = 0,
+    val part: String = ""
 )
 
 data class QRLoginData(

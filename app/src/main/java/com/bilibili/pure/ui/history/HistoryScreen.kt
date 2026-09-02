@@ -179,9 +179,9 @@ private fun HistoryCard(
     onClick: () -> Unit
 ) {
     val imageUrl = when {
-        item.pic.startsWith("//") -> "https:${item.pic}"
-        item.pic.startsWith("http://") -> "https:${item.pic.removePrefix("http:")}"
-        else -> item.pic
+        (item.pic ?: "").startsWith("//") -> "https:${item.pic}"
+        (item.pic ?: "").startsWith("http://") -> "https:${item.pic?.removePrefix("http:")}"
+        else -> item.pic ?: ""
     }
 
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }

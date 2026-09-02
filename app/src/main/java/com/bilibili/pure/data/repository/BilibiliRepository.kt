@@ -90,6 +90,19 @@ class BilibiliRepository(
         fullHistoryCache = null
     }
 
+    suspend fun searchHistory(keyword: String, page: Int = 1): Result<List<HistorySearchItem>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchHistory: keyword=$keyword page=$page")
+        return runCatching {
+            val response = api.searchHistory(keyword = keyword, page = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchHistory response: code=${response.code}")
+            if (response.code == 0) {
+                response.data?.list ?: emptyList()
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "searchHistory failed", it) }
+    }
+
     suspend fun reportProgress(aid: Long, cid: Long, progress: Long): Result<Unit> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress: aid=$aid cid=$cid progress=${progress}s")
         return runCatching {

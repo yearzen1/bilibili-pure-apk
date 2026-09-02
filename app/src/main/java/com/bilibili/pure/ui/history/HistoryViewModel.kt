@@ -5,6 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.model.HistoryItem
+import com.bilibili.pure.data.model.HistorySearchItem
+import com.bilibili.pure.data.model.HistoryPage
+import com.bilibili.pure.data.model.VideoOwner
+import com.bilibili.pure.data.model.VideoStat
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,10 +97,10 @@ class HistoryViewModel(
     private fun searchInHistory(query: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSearchLoading = true)
-            repository.getAllHistory()
-                .onSuccess { all ->
+            repository.searchHistory(keyword = query)
+                .onSuccess { list ->
                     _uiState.value = _uiState.value.copy(
-                        searchResults = all.filter { it.title.contains(query, ignoreCase = true) },
+                        searchResults = list.map { it.toHistoryItem() },
                         isSearchLoading = false
                     )
                 }
@@ -104,9 +108,24 @@ class HistoryViewModel(
                     Log.e(BilibiliApp.TAG, "searchInHistory error: ${e.message}")
                     _uiState.value = _uiState.value.copy(
                         isSearchLoading = false,
-                        error = e.message ?: "加载失败"
+                        error = e.message ?: "搜索失败"
                     )
                 }
         }
     }
+
+    private fun HistorySearchItem.toHistoryItem() = HistoryItem(
+        bvid = history?.bvid ?: "",
+        aid = history?.oid ?: 0,
+        title = title,
+        pic = cover,
+        owner = VideoOwner(mid = authorMid, name = authorName, face = authorFace ?: ""),
+        stat = VideoStat(),
+        duration = duration,
+        progress = progress,
+        viewAt = viewAt,
+        cid = history?.cid ?: 0,
+        page = history?.let { HistoryPage(page = it.page, part = it.part) },
+        videos = videos
+    )
 }
