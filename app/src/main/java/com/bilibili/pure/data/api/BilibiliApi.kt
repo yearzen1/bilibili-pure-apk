@@ -205,6 +205,12 @@ interface BilibiliApi {
     @GET("x/web-interface/card")
     suspend fun getUserCard(@Query("mid") mid: Long): ApiResponse<UserCardData>
 
+    @GET("x/player/wbi/v2")
+    suspend fun getPlayerInfo(
+        @Query("aid") aid: Long,
+        @Query("cid") cid: Long
+    ): ApiResponse<PlayerInfo>
+
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String

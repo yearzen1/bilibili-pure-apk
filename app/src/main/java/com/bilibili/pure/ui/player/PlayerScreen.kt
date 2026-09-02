@@ -305,6 +305,8 @@ fun PlayerScreen(
                 speedCtl = speedCtl,
                 onFullscreenToggle = { toggleFullscreen() },
                 onQualitySelected = { vm.selectQuality(it) },
+                onSubtitleSelected = { vm.selectSubtitle(it) },
+                onSubtitlePositionChanged = { x, y -> vm.updateSubtitlePosition(x, y) },
                 isFullscreen = true,
                 onBack = onBack,
                 isPausedByWifi = { pausedByWifi.value },
@@ -353,6 +355,8 @@ fun PlayerScreen(
                         speedCtl = speedCtl,
                         onFullscreenToggle = { toggleFullscreen() },
                         onQualitySelected = { vm.selectQuality(it) },
+                        onSubtitleSelected = { vm.selectSubtitle(it) },
+                        onSubtitlePositionChanged = { x, y -> vm.updateSubtitlePosition(x, y) },
                         isFullscreen = false,
                         onBack = onBack,
                         isPausedByWifi = { pausedByWifi.value },
@@ -427,6 +431,8 @@ private fun PlayerContent(
     speedCtl: SpeedController,
     onFullscreenToggle: () -> Unit,
     onQualitySelected: (QualityOption) -> Unit,
+    onSubtitleSelected: (com.bilibili.pure.data.model.SubtitleTrack?) -> Unit,
+    onSubtitlePositionChanged: (Float, Float) -> Unit,
     isFullscreen: Boolean,
     onBack: () -> Unit = {},
     isPausedByWifi: () -> Boolean = { false },
@@ -446,7 +452,7 @@ private fun PlayerContent(
             currentTime = timeFormat.format(System.currentTimeMillis())
         }
     }
-    val controlBar = remember { PlayerControlBar(onQualitySelected) }
+    val controlBar = remember { PlayerControlBar(onQualitySelected, onSubtitleSelected) }
     var showBackButton by remember { mutableStateOf(true) }
     var showSpeedToast by remember { mutableStateOf(false) }
     var showBrightnessOverlay by remember { mutableStateOf(false) }
@@ -621,7 +627,14 @@ private fun PlayerContent(
                         }
                     },
                     update = {
-                        controlBar.update(speedCtl.baseSpeed, uiState.currentQuality, uiState.availableQualities)
+                        controlBar.update(
+                            speedCtl.baseSpeed,
+                            uiState.currentQuality,
+                            uiState.availableQualities,
+                            uiState.availableSubtitles,
+                            uiState.currentSubtitle,
+                            uiState.subtitleEnabled
+                        )
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -711,6 +724,15 @@ private fun PlayerContent(
                 )
             }
         }
+
+        SubtitleOverlay(
+            cues = uiState.subtitleCues,
+            currentPositionMs = player.currentPosition,
+            offsetX = uiState.subtitleOffsetX,
+            offsetY = uiState.subtitleOffsetY,
+            onPositionChanged = onSubtitlePositionChanged,
+            modifier = Modifier.fillMaxSize()
+        )
 
         AnimatedVisibility(
             visible = showBrightnessOverlay,

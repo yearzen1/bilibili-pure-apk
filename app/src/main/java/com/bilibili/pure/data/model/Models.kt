@@ -555,3 +555,52 @@ data class UserCardInfo(
     val face: String = "",
     val sign: String = ""
 )
+
+data class PlayerInfo(
+    val subtitle: SubtitleData? = null
+)
+
+data class SubtitleData(
+    @SerializedName("allow_submit") val allowSubmit: Boolean = false,
+    val lan: String = "",
+    val lan_doc: String = "",
+    val subtitles: List<SubtitleTrackInfo> = emptyList()
+)
+
+data class SubtitleTrackInfo(
+    val id: Long = 0,
+    val lan: String = "",
+    val lan_doc: String = "",
+    @SerializedName("subtitle_url") val subtitleUrl: String = "",
+    val type: Int = 0,
+    @SerializedName("ai_status") val aiStatus: Int = 0,
+    @SerializedName("ai_type") val aiType: Int = 0,
+    @SerializedName("is_lock") val isLock: Boolean = false,
+    @SerializedName("id_str") val idStr: String = ""
+)
+
+data class SubtitleTrack(
+    val id: Long,
+    val lan: String,
+    val lanDoc: String,
+    val subtitleUrl: String,
+    val type: Int,
+    val aiStatus: Int = 0
+) {
+    val isAiSubtitle: Boolean get() = type == 1
+    val displayName: String get() = if (isAiSubtitle) "${lanDoc}（AI）" else lanDoc
+}
+
+data class SubtitleBody(
+    val font_size: Float = 0.4f,
+    val font_color: String = "#FFFFFF",
+    val body: List<SubtitleCue> = emptyList()
+)
+
+data class SubtitleCue(
+    val from: Double = 0.0,
+    val to: Double = 0.0,
+    val content: String = "",
+    val sid: Int = 0,
+    val location: Int = 2
+)

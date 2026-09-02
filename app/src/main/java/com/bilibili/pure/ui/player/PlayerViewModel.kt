@@ -32,7 +32,13 @@ data class PlayerUiState(
     val dashVideo: DashStream? = null,
     val dashAudio: DashStream? = null,
     val isDash: Boolean = false,
-    val localFiles: Map<Long, String> = emptyMap()
+    val localFiles: Map<Long, String> = emptyMap(),
+    val availableSubtitles: List<SubtitleTrack> = emptyList(),
+    val currentSubtitle: SubtitleTrack? = null,
+    val subtitleCues: List<SubtitleCue> = emptyList(),
+    val subtitleEnabled: Boolean = false,
+    val subtitleOffsetX: Float = 0f,
+    val subtitleOffsetY: Float = 0f
 )
 
 class PlayerViewModel(
@@ -103,6 +109,7 @@ class PlayerViewModel(
                 )
                 Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> pageCid=${startPage.cid} resumeMs=${resumeMs}")
                 loadPlayUrlDash(bvid, startPage.cid)
+                loadSubtitles(info.aid, startPage.cid)
             }
             .onFailure { e ->
                 Log.e(BilibiliApp.TAG, "PlayerVM: load failed", e)
@@ -245,5 +252,82 @@ class PlayerViewModel(
         }
 
         return videos.minByOrNull { it.id }
+    }
+
+    private fun loadSubtitles(aid: Long, cid: Long) {
+        viewModelScope.launch {
+            repository.getSubtitleTracks(aid, cid)
+                .onSuccess { tracks ->
+                    Log.d(BilibiliApp.TAG, "loadSubtitles: ${tracks.size} tracks")
+                    val sortedTracks = tracks.sortedWith(
+                        compareBy<SubtitleTrack> { it.type }.thenBy { it.lan }
+                    )
+                    _uiState.value = _uiState.value.copy(availableSubtitles = sortedTracks)
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "loadSubtitles failed", e)
+                }
+        }
+    }
+
+    fun selectSubtitle(track: SubtitleTrack?) {
+        val aid = _uiState.value.videoInfo?.aid ?: return
+        Log.d(BilibiliApp.TAG, "selectSubtitle: ${track?.lanDoc}")
+
+        if (track == null) {
+            _uiState.value = _uiState.value.copy(
+                currentSubtitle = null,
+                subtitleCues = emptyList(),
+                subtitleEnabled = false
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            currentSubtitle = track,
+            subtitleEnabled = true
+        )
+
+        viewModelScope.launch {
+            repository.getSubtitleContent(track.subtitleUrl)
+                .onSuccess { body ->
+                    Log.d(BilibiliApp.TAG, "selectSubtitle: ${body.body.size} cues")
+                    _uiState.value = _uiState.value.copy(subtitleCues = body.body)
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "selectSubtitle failed", e)
+                }
+        }
+    }
+
+    fun toggleSubtitle() {
+        val current = _uiState.value.currentSubtitle
+        val enabled = _uiState.value.subtitleEnabled
+
+        if (current == null) {
+            val firstTrack = _uiState.value.availableSubtitles.firstOrNull()
+            if (firstTrack != null) {
+                selectSubtitle(firstTrack)
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(subtitleEnabled = !enabled)
+        }
+    }
+
+    fun updateSubtitlePosition(offsetX: Float, offsetY: Float) {
+        _uiState.value = _uiState.value.copy(
+            subtitleOffsetX = offsetX,
+            subtitleOffsetY = offsetY
+        )
+        AppSettings.subtitleOffsetX = offsetX
+        AppSettings.subtitleOffsetY = offsetY
+    }
+
+    init {
+        _uiState.value = _uiState.value.copy(
+            subtitleOffsetX = AppSettings.subtitleOffsetX,
+            subtitleOffsetY = AppSettings.subtitleOffsetY,
+            subtitleEnabled = AppSettings.subtitleEnabled
+        )
     }
 }

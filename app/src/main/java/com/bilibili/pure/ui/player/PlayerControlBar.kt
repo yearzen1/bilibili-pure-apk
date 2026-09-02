@@ -10,19 +10,25 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import com.bilibili.pure.R
 import com.bilibili.pure.data.model.QualityOption
+import com.bilibili.pure.data.model.SubtitleTrack
 import androidx.media3.ui.PlayerView
 
 class PlayerControlBar(
-    private val onQualitySelected: (QualityOption) -> Unit
+    private val onQualitySelected: (QualityOption) -> Unit,
+    private val onSubtitleSelected: (SubtitleTrack?) -> Unit
 ) {
     private var speedCtl: SpeedController? = null
 
     private var speedButton: TextView? = null
     private var qualityButton: TextView? = null
+    private var subtitleButton: TextView? = null
 
     private var currentSpeed = 1.0f
     private var currentQuality: QualityOption? = null
     private var availableQualities: List<QualityOption> = emptyList()
+    private var availableSubtitles: List<SubtitleTrack> = emptyList()
+    private var currentSubtitle: SubtitleTrack? = null
+    private var subtitleEnabled: Boolean = false
 
     fun attach(ctx: Context, playerView: PlayerView, speedCtl: SpeedController) {
         this.speedCtl = speedCtl
@@ -33,11 +39,9 @@ class PlayerControlBar(
         val settingsView = playerView.findViewById<View>(settingsId)
         val row = settingsView?.parent as? ViewGroup ?: return
 
-        // Create buttons exactly once and hold references. Media3 may move them
-        // into the overflow area on narrow layouts; references stay valid so we
-        // never re-create (which was the source of duplicate buttons).
-        // Insert at index 0: speed first, then quality (pushes speed right),
-        // yielding visible order: 画质, 倍数, 设置, 全屏.
+        if (subtitleButton == null) {
+            subtitleButton = createSubtitleButton(ctx).also { row.addView(it, 0) }
+        }
         if (speedButton == null) {
             speedButton = createSpeedButton(ctx).also { row.addView(it, 0) }
         }
@@ -46,16 +50,88 @@ class PlayerControlBar(
         }
     }
 
-    fun update(newSpeed: Float, newQuality: QualityOption?, newQualities: List<QualityOption>) {
+    fun update(
+        newSpeed: Float,
+        newQuality: QualityOption?,
+        newQualities: List<QualityOption>,
+        newSubtitles: List<SubtitleTrack>,
+        newCurrentSubtitle: SubtitleTrack?,
+        newSubtitleEnabled: Boolean
+    ) {
         currentSpeed = newSpeed
         currentQuality = newQuality
         availableQualities = newQualities
+        availableSubtitles = newSubtitles
+        currentSubtitle = newCurrentSubtitle
+        subtitleEnabled = newSubtitleEnabled
 
         speedButton?.text = "%.1fx".format(currentSpeed)
 
         val qb = qualityButton ?: return
         qb.visibility = if (newQualities.size > 1) View.VISIBLE else View.GONE
         qb.text = currentQuality?.description ?: "画质"
+
+        val sb = subtitleButton ?: return
+        if (newSubtitles.isEmpty()) {
+            sb.visibility = View.GONE
+        } else {
+            sb.visibility = View.VISIBLE
+            sb.text = when {
+                !newSubtitleEnabled -> "CC"
+                newCurrentSubtitle?.isAiSubtitle == true -> "AI"
+                newCurrentSubtitle != null -> newCurrentSubtitle.lanDoc.take(2)
+                else -> "CC"
+            }
+        }
+    }
+
+    private fun createSubtitleButton(ctx: Context): TextView {
+        val density = ctx.resources.displayMetrics.density
+        val btnSize = (48 * density).toInt()
+        val btnMargin = (2 * density).toInt()
+
+        return TextView(ctx).apply {
+            text = "CC"
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).also {
+                it.leftMargin = btnMargin
+                it.rightMargin = btnMargin
+            }
+            setOnClickListener { anchor ->
+                val subtitles = availableSubtitles
+                if (subtitles.isEmpty()) return@setOnClickListener
+                val darkCtx = ContextThemeWrapper(ctx, R.style.ThemeOverlay_Bilibili_DarkPopup)
+                val popup = PopupMenu(darkCtx, anchor, Gravity.TOP)
+
+                popup.menu.add(0, -1, 0, "关闭字幕").apply {
+                    isChecked = !subtitleEnabled
+                }
+                subtitles.forEachIndexed { i, track ->
+                    popup.menu.add(0, i, 0, track.displayName).apply {
+                        isChecked = track.id == currentSubtitle?.id && subtitleEnabled
+                    }
+                }
+
+                popup.menu.setGroupCheckable(0, true, false)
+
+                popup.setOnMenuItemClickListener { item ->
+                    if (item.itemId == -1) {
+                        onSubtitleSelected(null)
+                    } else {
+                        val track = subtitles.getOrNull(item.itemId)
+                        if (track != null) {
+                            onSubtitleSelected(track)
+                        }
+                    }
+                    true
+                }
+                popup.show()
+            }
+        }
     }
 
     private fun createSpeedButton(ctx: Context): TextView {

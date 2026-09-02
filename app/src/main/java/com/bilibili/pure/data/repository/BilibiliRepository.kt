@@ -594,4 +594,48 @@ class BilibiliRepository(
             cookies
         }
     }
+
+    suspend fun getSubtitleTracks(aid: Long, cid: Long): Result<List<SubtitleTrack>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSubtitleTracks: aid=$aid cid=$cid")
+        return runCatching {
+            val response = api.getPlayerInfo(aid = aid, cid = cid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSubtitleTracks response: code=${response.code}")
+            if (response.code == 0) {
+                val subtitles = response.data?.subtitle?.subtitles ?: emptyList()
+                subtitles.map { track ->
+                    SubtitleTrack(
+                        id = track.id,
+                        lan = track.lan,
+                        lanDoc = track.lan_doc,
+                        subtitleUrl = track.subtitleUrl.let { url ->
+                            if (url.startsWith("//")) "https:$url" else url
+                        },
+                        type = track.type,
+                        aiStatus = track.aiStatus
+                    )
+                }.filter { it.subtitleUrl.isNotBlank() }
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSubtitleTracks failed", it) }
+    }
+
+    suspend fun getSubtitleContent(url: String): Result<SubtitleBody> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSubtitleContent: url=${url.take(80)}")
+        return runCatching {
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Referer", "https://www.bilibili.com/")
+                .build()
+            val responseBody = withContext(Dispatchers.IO) {
+                BilibiliApi.httpClient.newCall(request).execute().use { response ->
+                    response.body?.string() ?: throw Exception("Empty response")
+                }
+            }
+            val body = com.google.gson.Gson().fromJson(responseBody, SubtitleBody::class.java)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSubtitleContent: ${body.body.size} cues")
+            body
+        }.onFailure { Log.e(BilibiliApp.TAG, "getSubtitleContent failed", it) }
+    }
 }

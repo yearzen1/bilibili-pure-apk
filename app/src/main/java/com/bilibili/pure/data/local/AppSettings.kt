@@ -9,6 +9,9 @@ object AppSettings {
     private const val PREFS_NAME = "bili_settings"
     private const val KEY_WIFI_ONLY_PLAYBACK = "wifi_only_playback"
     private const val KEY_WIFI_ONLY_DOWNLOAD = "wifi_only_download"
+    private const val KEY_SUBTITLE_OFFSET_X = "subtitle_offset_x"
+    private const val KEY_SUBTITLE_OFFSET_Y = "subtitle_offset_y"
+    private const val KEY_SUBTITLE_ENABLED = "subtitle_enabled"
 
     private lateinit var prefs: SharedPreferences
 
@@ -29,6 +32,18 @@ object AppSettings {
     var wifiOnlyDownload: Boolean
         get() = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOAD, true)
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, value).apply()
+
+    var subtitleOffsetX: Float
+        get() = prefs.getFloat(KEY_SUBTITLE_OFFSET_X, 0f)
+        set(value) = prefs.edit().putFloat(KEY_SUBTITLE_OFFSET_X, value).apply()
+
+    var subtitleOffsetY: Float
+        get() = prefs.getFloat(KEY_SUBTITLE_OFFSET_Y, 0f)
+        set(value) = prefs.edit().putFloat(KEY_SUBTITLE_OFFSET_Y, value).apply()
+
+    var subtitleEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SUBTITLE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_SUBTITLE_ENABLED, value).apply()
 
     fun isWifiConnected(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
