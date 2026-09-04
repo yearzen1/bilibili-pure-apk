@@ -56,6 +56,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import me.saket.telephoto.zoomable.ZoomSpec
@@ -66,7 +67,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import android.widget.Toast
+import com.bilibili.pure.BilibiliApp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -343,6 +346,7 @@ fun DetailScreen(
             onConfirm = {
                 val quality = multiPSelectedQuality ?: return@PageSelectionDialog
                 val selected = pages.filter { it.page in multiPSelectedPages }
+                Log.d(BilibiliApp.TAG, "Batch download confirm: totalPages=${pages.size}, selectedPages=${selected.size}, selected=${selected.map { it.page }}")
                 if (selected.isEmpty()) return@PageSelectionDialog
                 showMultiPDialog = false
                 isStartingBatchDownload = true
@@ -867,16 +871,26 @@ private fun DetailContent(
                         }
 
                         if (showCollectionSheet && mid != null && seasonId > 0) {
+                            // Full episode list from ugcSeason (already loaded with videoInfo)
+                            val allEpisodes = remember(ugcSeason) {
+                                ugcSeason.sections?.flatMap { section ->
+                                    section.episodes?.map { ep ->
+                                        SeasonArchiveItem(
+                                            bvid = ep.bvid,
+                                            title = ep.arc?.title ?: ep.title,
+                                            pic = ep.arc?.pic ?: "",
+                                            duration = ep.arc?.duration ?: ep.page?.duration ?: 0,
+                                            pubdate = ep.arc?.pubdate ?: 0,
+                                            stat = ep.arc?.stat
+                                        )
+                                    } ?: emptyList()
+                                } ?: emptyList()
+                            }
                             CollectionBottomSheet(
                                 seasonTitle = ugcSeason.title,
-                                episodes = collectionEpisodes,
+                                episodes = allEpisodes,
                                 currentBvid = videoInfo?.bvid ?: "",
-                                sortDesc = collectionSortDesc,
-                                hasMore = collectionHasMore,
-                                loadingMore = collectionLoadingMore,
                                 onDismiss = { showCollectionSheet = false },
-                                onSortToggle = { onToggleCollectionSort(mid, seasonId) },
-                                onLoadMore = { onLoadMoreCollection(mid, seasonId) },
                                 onEpisodeClick = { bvid ->
                                     showCollectionSheet = false
                                     if (bvid.isNotBlank() && bvid != videoInfo?.bvid) {
@@ -884,13 +898,6 @@ private fun DetailContent(
                                     }
                                 }
                             )
-
-                            // Load collection when sheet opens and no data yet
-                            LaunchedEffect(seasonId) {
-                                if (collectionEpisodes.isEmpty()) {
-                                    onLoadCollection(mid, seasonId)
-                                }
-                            }
                         }
                     }
                 }
@@ -1564,12 +1571,7 @@ private fun CollectionBottomSheet(
     seasonTitle: String,
     episodes: List<SeasonArchiveItem>,
     currentBvid: String,
-    sortDesc: Boolean,
-    hasMore: Boolean,
-    loadingMore: Boolean,
     onDismiss: () -> Unit,
-    onSortToggle: () -> Unit,
-    onLoadMore: () -> Unit,
     onEpisodeClick: (String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1584,6 +1586,12 @@ private fun CollectionBottomSheet(
                 .fillMaxWidth()
                 .heightIn(max = screenHeight * 0.6f)
         ) {
+            var sortDesc by remember { mutableStateOf(true) }
+            val sortedEpisodes = remember(episodes, sortDesc) {
+                if (sortDesc) episodes.sortedByDescending { it.pubdate }
+                else episodes.sortedBy { it.pubdate }
+            }
+
             // Title bar
             Row(
                 modifier = Modifier
@@ -1592,14 +1600,13 @@ private fun CollectionBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "合集：$seasonTitle",
+                    text = "合集：$seasonTitle（${episodes.size}集）",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Sort toggle button with text
-                TextButton(onClick = onSortToggle) {
+                TextButton(onClick = { sortDesc = !sortDesc }) {
                     Icon(
                         if (sortDesc) Icons.Outlined.ArrowDownward else Icons.Outlined.ArrowUpward,
                         contentDescription = null,
@@ -1613,14 +1620,7 @@ private fun CollectionBottomSheet(
             HorizontalDivider()
 
             // Episode list
-            if (episodes.isEmpty() && loadingMore) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-            } else if (episodes.isEmpty()) {
+            if (sortedEpisodes.isEmpty()) {
                 Text(
                     text = "（暂无分集）",
                     style = MaterialTheme.typography.bodySmall,
@@ -1629,42 +1629,38 @@ private fun CollectionBottomSheet(
                 )
             } else {
                 val listState = rememberLazyListState()
+                var isFirstSort by remember { mutableStateOf(true) }
 
-                // Auto-load more when near bottom
-                LaunchedEffect(listState) {
-                    snapshotFlow {
-                        val layoutInfo = listState.layoutInfo
-                        val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                        val total = layoutInfo.totalItemsCount
-                        total > 0 && lastVisible >= total - 3
-                    }.collect { nearEnd ->
-                        if (nearEnd && hasMore && !loadingMore) {
-                            onLoadMore()
-                        }
+                // Scroll to current video (one-shot on first open)
+                LaunchedEffect(Unit) {
+                    val index = sortedEpisodes.indexOfFirst { it.bvid == currentBvid }
+                    Log.d(BilibiliApp.TAG, "scroll to current: bvid=$currentBvid size=${sortedEpisodes.size} index=$index")
+                    if (index > 0) {
+                        listState.scrollToItem(index)
+                        Log.d(BilibiliApp.TAG, "scrolled to index $index")
+                    }
+                }
+
+                // Scroll to top on sort toggle (skip first)
+                LaunchedEffect(sortDesc) {
+                    if (isFirstSort) {
+                        isFirstSort = false
+                    } else {
+                        listState.scrollToItem(0)
                     }
                 }
 
                 LazyColumn(state = listState) {
                     items(
-                        count = episodes.size,
-                        key = { episodes[it].bvid }
+                        count = sortedEpisodes.size,
+                        key = { sortedEpisodes[it].bvid }
                     ) { index ->
-                        val item = episodes[index]
+                        val item = sortedEpisodes[index]
                         BottomSheetEpisodeRow(
                             item = item,
                             isCurrent = item.bvid == currentBvid,
                             onClick = { onEpisodeClick(item.bvid) }
                         )
-                    }
-                    if (loadingMore) {
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            }
-                        }
                     }
                 }
             }
