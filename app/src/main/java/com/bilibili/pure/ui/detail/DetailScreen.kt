@@ -296,7 +296,8 @@ fun DetailScreen(
                                     quality = quality.quality,
                                     qualityDesc = quality.description,
                                     url = url,
-                                    overrideWifiOnly = true
+                                    overrideWifiOnly = true,
+                                    aid = videoInfo.aid
                                 )
                                 Toast.makeText(context, "开始下载: ${videoInfo.title}", Toast.LENGTH_SHORT).show()
                             } else {
@@ -355,7 +356,8 @@ fun DetailScreen(
                                 DownloadManager.BatchPageInfo(
                                     cid = it.cid,
                                     page = it.page,
-                                    part = it.part
+                                    part = it.part,
+                                    aid = videoInfo.aid
                                 )
                             },
                             quality = quality.quality,

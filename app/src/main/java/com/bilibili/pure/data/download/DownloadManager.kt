@@ -8,6 +8,7 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.DownloadInfo
+import com.bilibili.pure.data.repository.BilibiliRepository
 import com.bilibili.pure.data.local.AppSettings
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -84,7 +85,8 @@ class DownloadManager(private val context: Context) {
         url: String,
         overrideWifiOnly: Boolean = false,
         page: Int = 1,
-        part: String = ""
+        part: String = "",
+        aid: Long = 0
     ) {
         if (!overrideWifiOnly && AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
             Log.d(TAG, "Download blocked: WiFi-only mode and not on WiFi")
@@ -124,7 +126,8 @@ class DownloadManager(private val context: Context) {
             status = DownloadInfo.STATUS_PENDING,
             createTime = System.currentTimeMillis(),
             page = page,
-            part = part
+            part = part,
+            aid = aid
         )
 
         val downloads = getDownloads().toMutableList()
@@ -147,7 +150,8 @@ class DownloadManager(private val context: Context) {
     data class BatchPageInfo(
         val cid: Long,
         val page: Int,
-        val part: String
+        val part: String,
+        val aid: Long = 0
     )
 
     suspend fun startBatchDownload(
@@ -177,7 +181,8 @@ class DownloadManager(private val context: Context) {
                             url = url,
                             overrideWifiOnly = true,
                             page = p.page,
-                            part = p.part
+                            part = p.part,
+                            aid = p.aid
                         )
                     } else {
                         Log.w(TAG, "Batch download: no URL for P${p.page} ${p.part}")
@@ -286,6 +291,8 @@ class DownloadManager(private val context: Context) {
             Log.d(TAG, "Download completed: ${info.id} size=${file.length()}")
             DownloadNotificationHelper.showCompleted(context, info.title)
 
+            downloadSubtitles(info, file)
+
             checkAllDone()
 
         } catch (e: CancellationException) {
@@ -308,6 +315,37 @@ class DownloadManager(private val context: Context) {
                 )
             }
             Log.e(TAG, "Download failed: ${info.id}", e)
+        }
+    }
+
+    private suspend fun downloadSubtitles(info: DownloadInfo, videoFile: File) {
+        if (info.aid == 0L) {
+            Log.d(TAG, "Subtitle skip: aid=0 for ${info.id}")
+            return
+        }
+        try {
+            val repository = BilibiliRepository()
+            val tracks = repository.getSubtitleTracks(info.aid, info.cid).getOrNull()
+            if (tracks.isNullOrEmpty()) {
+                Log.d(TAG, "Subtitle skip: no tracks for ${info.id}")
+                return
+            }
+            val baseName = videoFile.nameWithoutExtension
+            val dir = videoFile.parentFile ?: return
+            for (track in tracks) {
+                try {
+                    val body = repository.getSubtitleContent(track.subtitleUrl).getOrNull() ?: continue
+                    val subFile = File(dir, "${baseName}_${track.lan}.json")
+                    withContext(Dispatchers.IO) {
+                        subFile.writeText(Gson().toJson(body))
+                    }
+                    Log.d(TAG, "Subtitle saved: ${subFile.name} (${body.body.size} cues)")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Subtitle download failed for ${track.lan}: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Subtitle tracks fetch failed: ${e.message}")
         }
     }
 
@@ -368,6 +406,7 @@ class DownloadManager(private val context: Context) {
         val download = getDownload(id)
         if (download != null) {
             File(download.filePath).delete()
+            deleteSubtitleFiles(download.filePath)
         }
         val downloads = getDownloads().toMutableList()
         downloads.removeAll { it.id == id }
@@ -386,7 +425,17 @@ class DownloadManager(private val context: Context) {
         val downloads = getDownloads()
         downloads.filter { it.status == DownloadInfo.STATUS_COMPLETED }.forEach { d ->
             File(d.filePath).delete()
+            deleteSubtitleFiles(d.filePath)
         }
         saveDownloads(downloads.filter { it.status != DownloadInfo.STATUS_COMPLETED })
+    }
+
+    private fun deleteSubtitleFiles(videoFilePath: String) {
+        val file = File(videoFilePath)
+        val dir = file.parentFile ?: return
+        val baseName = file.nameWithoutExtension
+        dir.listFiles()?.filter {
+            it.name.startsWith("${baseName}_") && it.name.endsWith(".json")
+        }?.forEach { it.delete() }
     }
 }

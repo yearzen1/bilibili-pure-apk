@@ -134,7 +134,7 @@ fun DownloadsScreen(
                             )
                         }
                         is DownloadListItem.Group -> {
-                            val isExpanded = expandedMap[item.group.bvid] ?: true
+                            val isExpanded = expandedMap[item.group.bvid] ?: false
                             DownloadGroupCard(
                                 group = item.group,
                                 isExpanded = isExpanded,

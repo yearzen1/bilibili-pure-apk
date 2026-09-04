@@ -73,6 +73,40 @@ class PlayerViewModel(
                 val pages = completed.map { VideoPage(cid = it.cid, page = it.page, part = it.part, duration = 0) }
                 val current = completed.find { it.cid == cid } ?: completed.first()
                 val currentPage = pages.find { it.cid == current.cid } ?: pages.first()
+                val localFiles = completed.associate { it.cid to it.filePath }
+
+                // Load local subtitles
+                val videoFile = java.io.File(current.filePath)
+                val dir = videoFile.parentFile
+                val baseName = videoFile.nameWithoutExtension
+                val subTracks = mutableListOf<SubtitleTrack>()
+                val subCuesMap = mutableMapOf<String, List<SubtitleCue>>()
+                if (dir != null && dir.exists()) {
+                    dir.listFiles()?.filter {
+                        it.name.startsWith(baseName) && it.name.endsWith(".json") && it.name != "${baseName}.json"
+                    }?.forEach { f ->
+                        try {
+                            val json = f.readText()
+                            val body = com.google.gson.Gson().fromJson(json, SubtitleBody::class.java)
+                            val lang = f.name.removePrefix("${baseName}_").removeSuffix(".json")
+                            val track = SubtitleTrack(
+                                id = lang.hashCode().toLong(),
+                                lan = lang,
+                                lanDoc = lang,
+                                subtitleUrl = f.absolutePath,
+                                type = 0,
+                                aiStatus = 0
+                            )
+                            subTracks.add(track)
+                            subCuesMap[lang] = body.body
+                        } catch (e: Exception) {
+                            Log.w(BilibiliApp.TAG, "Local subtitle parse failed: ${f.name}: ${e.message}")
+                        }
+                    }
+                }
+                val firstCues = subCuesMap.values.firstOrNull() ?: emptyList()
+                val firstTrack = subTracks.firstOrNull()
+
                 _uiState.value = PlayerUiState(
                     isLoading = false,
                     videoUrl = "file://${current.filePath}",
@@ -80,8 +114,15 @@ class PlayerViewModel(
                     currentPage = currentPage,
                     title = completed.first().title,
                     isDash = false,
-                    localFiles = completed.associate { it.cid to it.filePath }
+                    localFiles = localFiles,
+                    availableSubtitles = subTracks,
+                    currentSubtitle = firstTrack,
+                    subtitleCues = firstCues,
+                    subtitleEnabled = firstTrack != null
                 )
+                if (subTracks.isNotEmpty()) {
+                    Log.d(BilibiliApp.TAG, "Local subtitles loaded: ${subTracks.size} tracks")
+                }
                 return@launch
             }
 
@@ -127,11 +168,46 @@ class PlayerViewModel(
         val localPath = _uiState.value.localFiles[page.cid]
         if (localPath != null) {
             Log.d(BilibiliApp.TAG, "PlayerVM: selectPage local page=${page.page} cid=${page.cid}")
+            // Load subtitles for the new page
+            val videoFile = java.io.File(localPath)
+            val dir = videoFile.parentFile
+            val baseName = videoFile.nameWithoutExtension
+            val subTracks = mutableListOf<SubtitleTrack>()
+            val subCuesMap = mutableMapOf<String, List<SubtitleCue>>()
+            if (dir != null && dir.exists()) {
+                dir.listFiles()?.filter {
+                    it.name.startsWith(baseName) && it.name.endsWith(".json") && it.name != "${baseName}.json"
+                }?.forEach { f ->
+                    try {
+                        val json = f.readText()
+                        val body = com.google.gson.Gson().fromJson(json, SubtitleBody::class.java)
+                        val lang = f.name.removePrefix("${baseName}_").removeSuffix(".json")
+                        val track = SubtitleTrack(
+                            id = lang.hashCode().toLong(),
+                            lan = lang,
+                            lanDoc = lang,
+                            subtitleUrl = f.absolutePath,
+                            type = 0,
+                            aiStatus = 0
+                        )
+                        subTracks.add(track)
+                        subCuesMap[lang] = body.body
+                    } catch (e: Exception) {
+                        Log.w(BilibiliApp.TAG, "Local subtitle parse failed: ${f.name}: ${e.message}")
+                    }
+                }
+            }
+            val firstCues = subCuesMap.values.firstOrNull() ?: emptyList()
+            val firstTrack = subTracks.firstOrNull()
             _uiState.value = _uiState.value.copy(
                 currentPage = page,
                 videoUrl = "file://$localPath",
                 isDash = false,
-                isLoading = false
+                isLoading = false,
+                availableSubtitles = subTracks,
+                currentSubtitle = firstTrack,
+                subtitleCues = firstCues,
+                subtitleEnabled = firstTrack != null
             )
             return
         }
@@ -289,7 +365,7 @@ class PlayerViewModel(
     }
 
     fun selectSubtitle(track: SubtitleTrack?) {
-        val aid = _uiState.value.videoInfo?.aid ?: return
+        val aid = _uiState.value.videoInfo?.aid ?: 0L
         val cid = _uiState.value.currentPage?.cid ?: return
         Log.d(BilibiliApp.TAG, "selectSubtitle: ${track?.lanDoc}")
 
@@ -299,11 +375,13 @@ class PlayerViewModel(
                 subtitleCues = emptyList(),
                 subtitleEnabled = false
             )
-            subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
-                lan = "", enabled = false,
-                offsetX = _uiState.value.subtitleOffsetX,
-                offsetY = _uiState.value.subtitleOffsetY
-            ))
+            if (aid != 0L) {
+                subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+                    lan = "", enabled = false,
+                    offsetX = _uiState.value.subtitleOffsetX,
+                    offsetY = _uiState.value.subtitleOffsetY
+                ))
+            }
             return
         }
 
@@ -311,21 +389,32 @@ class PlayerViewModel(
             currentSubtitle = track,
             subtitleEnabled = true
         )
-        subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
-            lan = track.lan, enabled = true,
-            offsetX = _uiState.value.subtitleOffsetX,
-            offsetY = _uiState.value.subtitleOffsetY
-        ))
+        if (aid != 0L) {
+            subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
+                lan = track.lan, enabled = true,
+                offsetX = _uiState.value.subtitleOffsetX,
+                offsetY = _uiState.value.subtitleOffsetY
+            ))
+        }
 
         viewModelScope.launch {
-            repository.getSubtitleContent(track.subtitleUrl)
-                .onSuccess { body ->
+            try {
+                val body = if (track.subtitleUrl.startsWith("/")) {
+                    // Local file
+                    val file = java.io.File(track.subtitleUrl)
+                    if (file.exists()) {
+                        com.google.gson.Gson().fromJson(file.readText(), SubtitleBody::class.java)
+                    } else null
+                } else {
+                    repository.getSubtitleContent(track.subtitleUrl).getOrNull()
+                }
+                if (body != null) {
                     Log.d(BilibiliApp.TAG, "selectSubtitle: ${body.body.size} cues")
                     _uiState.value = _uiState.value.copy(subtitleCues = body.body)
                 }
-                .onFailure { e ->
-                    Log.e(BilibiliApp.TAG, "selectSubtitle failed", e)
-                }
+            } catch (e: Exception) {
+                Log.e(BilibiliApp.TAG, "selectSubtitle failed", e)
+            }
         }
     }
 
