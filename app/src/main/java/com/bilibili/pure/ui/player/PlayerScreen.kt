@@ -500,6 +500,7 @@ private fun PlayerContent(
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).also { view ->
+                            view.setBackgroundColor(android.graphics.Color.BLACK)
                             view.layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
