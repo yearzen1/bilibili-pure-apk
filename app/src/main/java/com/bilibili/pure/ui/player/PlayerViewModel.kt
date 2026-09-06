@@ -34,6 +34,7 @@ data class PlayerUiState(
     val dashAudio: DashStream? = null,
     val isDash: Boolean = false,
     val localFiles: Map<Long, String> = emptyMap(),
+    val localAid: Long = 0L,
     val availableSubtitles: List<SubtitleTrack> = emptyList(),
     val currentSubtitle: SubtitleTrack? = null,
     val subtitleCues: List<SubtitleCue> = emptyList(),
@@ -104,8 +105,23 @@ class PlayerViewModel(
                         }
                     }
                 }
-                val firstCues = subCuesMap.values.firstOrNull() ?: emptyList()
-                val firstTrack = subTracks.firstOrNull()
+
+                val aid = current.aid
+                val resumeMs = (playbackProgressManager.load(aid, current.cid) ?: 0L) * 1000L
+
+                val savedSub = subtitlePreferenceManager.load(aid, current.cid)
+                Log.d(BilibiliApp.TAG, "LOCAL load: aid=$aid cid=${current.cid} resumeMs=$resumeMs savedSub=${savedSub?.let { "lan=${it.lan} en=${it.enabled} offX=${it.offsetX} offY=${it.offsetY}" } ?: "null"}")
+                var enabled = false
+                var currentSub: SubtitleTrack? = null
+                var cues = emptyList<SubtitleCue>()
+                if (savedSub != null && savedSub.enabled && savedSub.lan.isNotBlank()) {
+                    val matched = subTracks.find { it.lan == savedSub.lan }
+                    if (matched != null) {
+                        currentSub = matched
+                        enabled = true
+                        cues = subCuesMap[matched.lan] ?: emptyList()
+                    }
+                }
 
                 _uiState.value = PlayerUiState(
                     isLoading = false,
@@ -115,11 +131,16 @@ class PlayerViewModel(
                     title = completed.first().title,
                     isDash = false,
                     localFiles = localFiles,
+                    localAid = aid,
                     availableSubtitles = subTracks,
-                    currentSubtitle = firstTrack,
-                    subtitleCues = firstCues,
-                    subtitleEnabled = firstTrack != null
+                    currentSubtitle = currentSub,
+                    subtitleCues = cues,
+                    subtitleEnabled = enabled,
+                    subtitleOffsetX = savedSub?.offsetX ?: 0f,
+                    subtitleOffsetY = savedSub?.offsetY ?: 0f,
+                    resumePositionMs = resumeMs
                 )
+                Log.d(BilibiliApp.TAG, "LOCAL load result: enabled=$enabled currentSub=${currentSub?.lan} subtitleEnabled=$enabled subTracks=${subTracks.size}")
                 if (subTracks.isNotEmpty()) {
                     Log.d(BilibiliApp.TAG, "Local subtitles loaded: ${subTracks.size} tracks")
                 }
@@ -197,18 +218,45 @@ class PlayerViewModel(
                     }
                 }
             }
-            val firstCues = subCuesMap.values.firstOrNull() ?: emptyList()
-            val firstTrack = subTracks.firstOrNull()
+
+            val completed = DownloadManager.getInstance(BilibiliApp.instance)
+                .getDownloads()
+                .filter { it.bvid == _uiState.value.currentPage?.let { p -> 
+                    DownloadManager.getInstance(BilibiliApp.instance).getDownloads().find { it.cid == p.cid }?.bvid 
+                } && it.status == DownloadInfo.STATUS_COMPLETED }
+            val downloadInfo = completed.find { it.cid == page.cid }
+            val aid = downloadInfo?.aid ?: _uiState.value.localAid
+            val resumeMs = (playbackProgressManager.load(aid, page.cid) ?: 0L) * 1000L
+
+            val savedSub = subtitlePreferenceManager.load(aid, page.cid)
+            Log.d(BilibiliApp.TAG, "selectPage LOCAL: aid=$aid cid=${page.cid} resumeMs=$resumeMs savedSub=${savedSub?.let { "lan=${it.lan} en=${it.enabled} offX=${it.offsetX} offY=${it.offsetY}" } ?: "null"}")
+            var enabled = false
+            var currentSub: SubtitleTrack? = null
+            var cues = emptyList<SubtitleCue>()
+            if (savedSub != null && savedSub.enabled && savedSub.lan.isNotBlank()) {
+                val matched = subTracks.find { it.lan == savedSub.lan }
+                if (matched != null) {
+                    currentSub = matched
+                    enabled = true
+                    cues = subCuesMap[matched.lan] ?: emptyList()
+                }
+            }
+
             _uiState.value = _uiState.value.copy(
                 currentPage = page,
                 videoUrl = "file://$localPath",
                 isDash = false,
                 isLoading = false,
+                resumePositionMs = resumeMs,
+                localAid = aid,
                 availableSubtitles = subTracks,
-                currentSubtitle = firstTrack,
-                subtitleCues = firstCues,
-                subtitleEnabled = firstTrack != null
+                currentSubtitle = currentSub,
+                subtitleCues = cues,
+                subtitleEnabled = enabled,
+                subtitleOffsetX = savedSub?.offsetX ?: 0f,
+                subtitleOffsetY = savedSub?.offsetY ?: 0f
             )
+            Log.d(BilibiliApp.TAG, "selectPage LOCAL result: enabled=$enabled currentSub=${currentSub?.lan} subtitleEnabled=$enabled subTracks=${subTracks.size}")
             return
         }
 
@@ -338,13 +386,14 @@ class PlayerViewModel(
         viewModelScope.launch {
             repository.getSubtitleTracks(aid, cid)
                 .onSuccess { tracks ->
-                    Log.d(BilibiliApp.TAG, "loadSubtitles: ${tracks.size} tracks")
+                    Log.d(BilibiliApp.TAG, "loadSubtitles: aid=$aid cid=$cid ${tracks.size} tracks")
                     val sortedTracks = tracks.sortedWith(
                         compareBy<SubtitleTrack> { it.type }.thenBy { it.lan }
                     )
                     _uiState.value = _uiState.value.copy(availableSubtitles = sortedTracks)
 
                     val saved = subtitlePreferenceManager.load(aid, cid)
+                    Log.d(BilibiliApp.TAG, "loadSubtitles saved pref: aid=$aid cid=$cid saved=${saved?.let { "lan=${it.lan} en=${it.enabled} offX=${it.offsetX} offY=${it.offsetY}" } ?: "null"}")
                     if (saved != null) {
                         _uiState.value = _uiState.value.copy(
                             subtitleOffsetX = saved.offsetX,
@@ -365,9 +414,9 @@ class PlayerViewModel(
     }
 
     fun selectSubtitle(track: SubtitleTrack?) {
-        val aid = _uiState.value.videoInfo?.aid ?: 0L
+        val aid = _uiState.value.videoInfo?.aid ?: _uiState.value.localAid ?: 0L
         val cid = _uiState.value.currentPage?.cid ?: return
-        Log.d(BilibiliApp.TAG, "selectSubtitle: ${track?.lanDoc}")
+        Log.d(BilibiliApp.TAG, "selectSubtitle: track=${track?.lan} aid=$aid cid=$cid isLocal=${_uiState.value.videoInfo==null}")
 
         if (track == null) {
             _uiState.value = _uiState.value.copy(
@@ -376,6 +425,7 @@ class PlayerViewModel(
                 subtitleEnabled = false
             )
             if (aid != 0L) {
+                Log.d(BilibiliApp.TAG, "selectSubtitle DISABLE: aid=$aid cid=$cid")
                 subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
                     lan = "", enabled = false,
                     offsetX = _uiState.value.subtitleOffsetX,
@@ -390,6 +440,7 @@ class PlayerViewModel(
             subtitleEnabled = true
         )
         if (aid != 0L) {
+            Log.d(BilibiliApp.TAG, "selectSubtitle SAVE: aid=$aid cid=$cid lan=${track.lan} enabled=true")
             subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
                 lan = track.lan, enabled = true,
                 offsetX = _uiState.value.subtitleOffsetX,
@@ -419,7 +470,7 @@ class PlayerViewModel(
     }
 
     fun toggleSubtitle() {
-        val aid = _uiState.value.videoInfo?.aid ?: return
+        val aid = _uiState.value.videoInfo?.aid ?: _uiState.value.localAid ?: return
         val cid = _uiState.value.currentPage?.cid ?: return
         val current = _uiState.value.currentSubtitle
         val enabled = _uiState.value.subtitleEnabled
@@ -431,6 +482,7 @@ class PlayerViewModel(
             }
         } else {
             val newEnabled = !enabled
+            Log.d(BilibiliApp.TAG, "toggleSubtitle: aid=$aid cid=$cid current=${current.lan} enabled=$enabled -> newEnabled=$newEnabled")
             _uiState.value = _uiState.value.copy(subtitleEnabled = newEnabled)
             subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
                 lan = current.lan, enabled = newEnabled,
@@ -441,13 +493,14 @@ class PlayerViewModel(
     }
 
     fun updateSubtitlePosition(offsetX: Float, offsetY: Float) {
-        val aid = _uiState.value.videoInfo?.aid
+        val aid = _uiState.value.videoInfo?.aid ?: _uiState.value.localAid
         val cid = _uiState.value.currentPage?.cid
+        Log.d(BilibiliApp.TAG, "updateSubtitlePosition: aid=$aid cid=$cid offX=$offsetX offY=$offsetY")
         _uiState.value = _uiState.value.copy(
             subtitleOffsetX = offsetX,
             subtitleOffsetY = offsetY
         )
-        if (aid != null && cid != null) {
+        if (aid != null && cid != null && aid != 0L) {
             val current = _uiState.value.currentSubtitle
             subtitlePreferenceManager.save(aid, cid, SubtitlePreference(
                 lan = current?.lan ?: "",
