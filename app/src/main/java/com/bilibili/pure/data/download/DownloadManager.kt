@@ -24,6 +24,7 @@ class DownloadManager(private val context: Context) {
         private const val TAG = BilibiliApp.TAG
         private const val PREFS_NAME = "bili_downloads"
         private const val KEY_DOWNLOADS = "downloads_list"
+        private const val MAX_CONCURRENT_DOWNLOADS = 3
 
         @Volatile
         private var instance: DownloadManager? = null
@@ -37,15 +38,31 @@ class DownloadManager(private val context: Context) {
 
     private val gson = Gson()
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val store = DownloadListStore(
+        readAll = { readDownloads() },
+        writeAll = { downloads ->
+            prefs.edit().putString(KEY_DOWNLOADS, gson.toJson(downloads)).apply()
+        }
+    )
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val pausedBytes = ConcurrentHashMap<String, Long>()
+    private val resolvingIds = ConcurrentHashMap.newKeySet<String>()
+    private val transferGate = DownloadTransferGate(MAX_CONCURRENT_DOWNLOADS)
 
     var onProgressChanged: ((String, Long, Long, Long) -> Unit)? = null
     var onStatusChanged: ((String, Int) -> Unit)? = null
     var onDownloadsChanged: (() -> Unit)? = null
 
-    fun getDownloads(): List<DownloadInfo> {
+    private val queueCoordinator = DownloadQueueCoordinator(
+        scope = scope,
+        persistPending = ::enqueuePendingDownloads,
+        resolveUrl = ::resolveDownloadUrl,
+        startTransfer = ::startResolvedDownload,
+        markFailed = ::markResolutionFailed
+    )
+
+    private fun readDownloads(): List<DownloadInfo> {
         val json = prefs.getString(KEY_DOWNLOADS, null) ?: return emptyList()
         return try {
             val type = object : TypeToken<List<DownloadInfo>>() {}.type
@@ -56,23 +73,22 @@ class DownloadManager(private val context: Context) {
         }
     }
 
-    fun getDownload(id: String): DownloadInfo? {
-        return getDownloads().find { it.id == id }
-    }
+    fun getDownloads(): List<DownloadInfo> = store.all()
 
-    private fun saveDownloads(downloads: List<DownloadInfo>) {
-        prefs.edit().putString(KEY_DOWNLOADS, gson.toJson(downloads)).apply()
-    }
+    fun getDownload(id: String): DownloadInfo? = store.all().find { it.id == id }
 
     private fun updateDownload(id: String, update: (DownloadInfo) -> DownloadInfo) {
-        val downloads = getDownloads().toMutableList()
-        val index = downloads.indexOfFirst { it.id == id }
-        if (index >= 0) {
-            downloads[index] = update(downloads[index])
-            saveDownloads(downloads)
-            onStatusChanged?.invoke(id, downloads[index].status)
+        val updated = store.update(id, update) ?: return
+        onStatusChanged?.invoke(id, updated.status)
+        onDownloadsChanged?.invoke()
+    }
+
+    private fun enqueuePendingDownloads(requests: List<DownloadInfo>): List<DownloadInfo> {
+        val queued = store.enqueuePending(requests).filter { resolvingIds.add(it.id) }
+        if (queued.isNotEmpty()) {
             onDownloadsChanged?.invoke()
         }
+        return queued
     }
 
     fun startDownload(
@@ -92,28 +108,49 @@ class DownloadManager(private val context: Context) {
             Log.d(TAG, "Download blocked: WiFi-only mode and not on WiFi")
             return
         }
-        val id = "${bvid}_${cid}"
-        val existing = getDownload(id)
-        if (existing != null && existing.status == DownloadInfo.STATUS_COMPLETED) {
-            Log.d(TAG, "Download already completed: $id")
+        val info = buildDownloadInfo(
+            bvid = bvid,
+            cid = cid,
+            title = title,
+            cover = cover,
+            quality = quality,
+            qualityDesc = qualityDesc,
+            page = page,
+            part = part,
+            aid = aid
+        )
+        val queued = enqueuePendingDownloads(listOf(info))
+        if (queued.isEmpty()) {
+            Log.d(TAG, "Download skipped: ${info.id}")
             return
         }
-        if (existing != null && existing.status == DownloadInfo.STATUS_DOWNLOADING) {
-            Log.d(TAG, "Download already in progress: $id")
-            return
-        }
+        onStatusChanged?.invoke(info.id, DownloadInfo.STATUS_PENDING)
+        startResolvedDownload(queued.first(), url)
+    }
 
+    private fun buildDownloadInfo(
+        bvid: String,
+        cid: Long,
+        title: String,
+        cover: String,
+        quality: Int,
+        qualityDesc: String,
+        page: Int = 1,
+        part: String = "",
+        aid: Long = 0
+    ): DownloadInfo {
         val downloadsDir = File(context.getExternalFilesDir(null), "downloads")
         if (!downloadsDir.exists()) downloadsDir.mkdirs()
 
-        val ext = "mp4"
         val safeTitle = title.replace(Regex("[^\\w\\u4e00-\\u9fff\\-]"), "_").take(50)
-        val pagePrefix = if (part.isNotEmpty()) "P${page} ${part.replace(Regex("[^\\w\\u4e00-\\u9fff\\-]"), "_").take(30)}_" else ""
-        val fileName = "${pagePrefix}${safeTitle}_${qualityDesc}.${ext}"
-        val file = File(downloadsDir, fileName)
-
-        val info = DownloadInfo(
-            id = id,
+        val pagePrefix = if (part.isNotEmpty()) {
+            "P${page} ${part.replace(Regex("[^\\w\\u4e00-\\u9fff\\-]"), "_").take(30)}_"
+        } else {
+            ""
+        }
+        val file = File(downloadsDir, "${pagePrefix}${safeTitle}_${qualityDesc}.mp4")
+        return DownloadInfo(
+            id = "${bvid}_${cid}",
             bvid = bvid,
             cid = cid,
             title = title,
@@ -129,22 +166,6 @@ class DownloadManager(private val context: Context) {
             part = part,
             aid = aid
         )
-
-        val downloads = getDownloads().toMutableList()
-        val existIdx = downloads.indexOfFirst { it.id == id }
-        if (existIdx >= 0) {
-            downloads[existIdx] = info
-        } else {
-            downloads.add(info)
-        }
-        saveDownloads(downloads)
-        onStatusChanged?.invoke(id, DownloadInfo.STATUS_PENDING)
-
-        startForegroundService()
-        val job = scope.launch {
-            downloadFile(info, url)
-        }
-        activeJobs[id] = job
     }
 
     data class BatchPageInfo(
@@ -154,46 +175,76 @@ class DownloadManager(private val context: Context) {
         val aid: Long = 0
     )
 
-    suspend fun startBatchDownload(
+    fun startBatchDownload(
         bvid: String,
         videoTitle: String,
         cover: String,
         pages: List<BatchPageInfo>,
         quality: Int,
         qualityDesc: String
-    ) {
+    ): Int {
+        if (pages.isEmpty()) return 0
+        val requests = pages.map { page ->
+            buildDownloadInfo(
+                bvid = bvid,
+                cid = page.cid,
+                title = videoTitle,
+                cover = cover,
+                quality = quality,
+                qualityDesc = qualityDesc,
+                page = page.page,
+                part = page.part,
+                aid = page.aid
+            )
+        }
+        val queued = queueCoordinator.enqueue(requests)
+        if (queued > 0) {
+            startForegroundService()
+            Log.d(TAG, "Batch download queued: $queued/${pages.size} pages for $bvid")
+        }
+        return queued
+    }
+
+    private suspend fun resolveDownloadUrl(download: DownloadInfo): String? {
         val api = BilibiliApi.create()
-        for (p in pages) {
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    api.getPlayUrl(bvid = bvid, cid = p.cid, qn = quality)
-                }
-                if (response.code == 0) {
-                    val url = response.data?.durl?.firstOrNull()?.url
-                    if (url != null) {
-                        startDownload(
-                            bvid = bvid,
-                            cid = p.cid,
-                            title = videoTitle,
-                            cover = cover,
-                            quality = quality,
-                            qualityDesc = qualityDesc,
-                            url = url,
-                            overrideWifiOnly = true,
-                            page = p.page,
-                            part = p.part,
-                            aid = p.aid
-                        )
-                    } else {
-                        Log.w(TAG, "Batch download: no URL for P${p.page} ${p.part}")
-                    }
-                } else {
-                    Log.w(TAG, "Batch download: API error for P${p.page} ${p.part}: ${response.message}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Batch download failed for P${p.page} ${p.part}", e)
+        val response = withContext(Dispatchers.IO) {
+            api.getPlayUrl(bvid = download.bvid, cid = download.cid, qn = download.quality)
+        }
+        if (response.code != 0) {
+            Log.w(TAG, "Batch download API error for P${download.page}: ${response.message}")
+            return null
+        }
+        val url = response.data?.durl?.firstOrNull()?.url
+        if (url.isNullOrEmpty()) {
+            Log.w(TAG, "Batch download: no URL for P${download.page} ${download.part}")
+        }
+        return url
+    }
+
+    private fun startResolvedDownload(info: DownloadInfo, url: String) {
+        resolvingIds.remove(info.id)
+        val current = getDownload(info.id)
+        if (current == null || current.status != DownloadInfo.STATUS_PENDING) {
+            Log.d(TAG, "Resolved download no longer pending: ${info.id}")
+            return
+        }
+        if (activeJobs[info.id]?.isActive == true) {
+            return
+        }
+        startForegroundService()
+        activeJobs[info.id] = scope.launch {
+            transferGate.run {
+                downloadFile(current, url)
             }
         }
+    }
+
+    private fun markResolutionFailed(info: DownloadInfo) {
+        resolvingIds.remove(info.id)
+        val current = getDownload(info.id) ?: return
+        if (current.status != DownloadInfo.STATUS_PENDING) return
+        updateDownload(info.id) { it.copy(status = DownloadInfo.STATUS_FAILED, speed = 0) }
+        Log.w(TAG, "Batch download failed to resolve: ${info.id}")
     }
 
     private fun startForegroundService() {
@@ -376,26 +427,18 @@ class DownloadManager(private val context: Context) {
         val url = getDownloadUrl(download) ?: return
         startForegroundService()
         val job = scope.launch {
-            downloadFile(download, url)
+            transferGate.run {
+                downloadFile(download, url)
+            }
         }
         activeJobs[id] = job
     }
 
     private fun getDownloadUrl(download: DownloadInfo): String? {
-        val bvid = download.bvid
-        val cid = download.cid
         return try {
-            val api = BilibiliApi.create()
-            val response = runBlocking {
-                api.getPlayUrl(bvid = bvid, cid = cid, qn = download.quality)
-            }
-            if (response.code == 0) {
-                response.data?.durl?.firstOrNull()?.url
-            } else {
-                null
-            }
+            runBlocking { resolveDownloadUrl(download) }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get download URL for $bvid", e)
+            Log.e(TAG, "Failed to get download URL for ${download.bvid}", e)
             null
         }
     }
@@ -403,14 +446,13 @@ class DownloadManager(private val context: Context) {
     fun cancelDownload(id: String) {
         activeJobs.remove(id)?.cancel()
         pausedBytes.remove(id)
-        val download = getDownload(id)
+        resolvingIds.remove(id)
+        val download = store.remove(id)
         if (download != null) {
             File(download.filePath).delete()
             deleteSubtitleFiles(download.filePath)
         }
-        val downloads = getDownloads().toMutableList()
-        downloads.removeAll { it.id == id }
-        saveDownloads(downloads)
+        onDownloadsChanged?.invoke()
     }
 
     fun deleteDownload(id: String) {
@@ -422,12 +464,11 @@ class DownloadManager(private val context: Context) {
     }
 
     fun clearCompleted() {
-        val downloads = getDownloads()
-        downloads.filter { it.status == DownloadInfo.STATUS_COMPLETED }.forEach { d ->
-            File(d.filePath).delete()
-            deleteSubtitleFiles(d.filePath)
+        store.removeCompleted().forEach { download ->
+            File(download.filePath).delete()
+            deleteSubtitleFiles(download.filePath)
         }
-        saveDownloads(downloads.filter { it.status != DownloadInfo.STATUS_COMPLETED })
+        onDownloadsChanged?.invoke()
     }
 
     private fun deleteSubtitleFiles(videoFilePath: String) {

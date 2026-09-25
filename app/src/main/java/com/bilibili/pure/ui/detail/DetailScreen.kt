@@ -128,7 +128,6 @@ fun DetailScreen(
     var multiPQualities by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
     var multiPSelectedQuality by remember { mutableStateOf<QualityOption?>(null) }
     var multiPSelectedPages by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var isStartingBatchDownload by remember { mutableStateOf(false) }
 
     fun startDownloadFlow() {
         val dm = DownloadManager.getInstance(context)
@@ -349,34 +348,29 @@ fun DetailScreen(
                 Log.d(BilibiliApp.TAG, "Batch download confirm: totalPages=${pages.size}, selectedPages=${selected.size}, selected=${selected.map { it.page }}")
                 if (selected.isEmpty()) return@PageSelectionDialog
                 showMultiPDialog = false
-                isStartingBatchDownload = true
-                scope.launch {
-                    try {
-                        DownloadManager.getInstance(context).startBatchDownload(
-                            bvid = bvid,
-                            videoTitle = videoInfo.title,
-                            cover = videoInfo.pic,
-                            pages = selected.map {
-                                DownloadManager.BatchPageInfo(
-                                    cid = it.cid,
-                                    page = it.page,
-                                    part = it.part,
-                                    aid = videoInfo.aid
-                                )
-                            },
-                            quality = quality.quality,
-                            qualityDesc = quality.description
+                val queued = DownloadManager.getInstance(context).startBatchDownload(
+                    bvid = bvid,
+                    videoTitle = videoInfo.title,
+                    cover = videoInfo.pic,
+                    pages = selected.map {
+                        DownloadManager.BatchPageInfo(
+                            cid = it.cid,
+                            page = it.page,
+                            part = it.part,
+                            aid = videoInfo.aid
                         )
-                        Toast.makeText(context, "开始下载 ${selected.size} 个分P", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "下载失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                    } finally {
-                        isStartingBatchDownload = false
-                    }
+                    },
+                    quality = quality.quality,
+                    qualityDesc = quality.description
+                )
+                val message = if (queued == selected.size) {
+                    "已加入下载队列: ${queued} 个分P"
+                } else {
+                    "已加入 $queued 个分P，跳过 ${selected.size - queued} 个"
                 }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             },
-            onDismiss = { showMultiPDialog = false },
-            isLoading = isStartingBatchDownload
+            onDismiss = { showMultiPDialog = false }
         )
     }
 
@@ -463,8 +457,7 @@ private fun PageSelectionDialog(
     onTogglePage: (Int) -> Unit,
     onSelectQuality: (QualityOption) -> Unit,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    isLoading: Boolean = false
+    onDismiss: () -> Unit
 ) {
     val allSelected = selectedPages.size == pages.size
     var showQualityMenu by remember { mutableStateOf(false) }
@@ -561,12 +554,8 @@ private fun PageSelectionDialog(
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
-                enabled = selectedPages.isNotEmpty() && !isLoading
+                enabled = selectedPages.isNotEmpty()
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
                 Text("下载 ${selectedPages.size} 个分P")
             }
         },
