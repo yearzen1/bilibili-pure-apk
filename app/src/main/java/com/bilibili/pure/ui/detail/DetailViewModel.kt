@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.model.CommentCursor
 import com.bilibili.pure.data.model.CommentItem
 import com.bilibili.pure.data.model.SeasonArchiveItem
 import com.bilibili.pure.data.model.SeasonMeta
@@ -18,6 +19,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+internal fun appendUniqueComments(
+    existing: List<CommentItem>,
+    incoming: List<CommentItem>
+): List<CommentItem> = (existing + incoming).distinctBy { it.rpid }
+
+internal data class CommentPageState(
+    val nextCursor: Int,
+    val hasMore: Boolean
+)
+
+internal fun resolveCommentPage(
+    cursor: CommentCursor?,
+    requestedCursor: Int
+): CommentPageState {
+    val nextCursor = cursor?.next ?: 0
+    return CommentPageState(
+        nextCursor = nextCursor,
+        hasMore = cursor != null && !cursor.isEnd && nextCursor > requestedCursor
+    )
+}
+
+internal fun isCurrentCommentRequest(
+    requestGeneration: Long,
+    currentGeneration: Long
+): Boolean = requestGeneration == currentGeneration
 
 data class ReplyThread(
     val items: List<CommentItem> = emptyList(),
@@ -66,11 +93,18 @@ class DetailViewModel(
 
     private val _uiState = MutableStateFlow(DetailUiState())
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+    private var commentsRequestGeneration = 0L
+
+    private fun startCommentRequest(): Long {
+        commentsRequestGeneration += 1
+        return commentsRequestGeneration
+    }
 
     fun load(bvid: String) {
         Log.d(BilibiliApp.TAG, "load detail: bvid=$bvid")
         val isLoggedIn = BilibiliApi.loginCookies.isNotEmpty()
         _uiState.value = DetailUiState(isLoading = true, isLoggedIn = isLoggedIn)
+        val commentsGeneration = startCommentRequest()
 
         viewModelScope.launch {
             repository.getVideoInfo(bvid)
@@ -82,7 +116,7 @@ class DetailViewModel(
                         favoriteCount = info.stat.favorite,
                         ugcSeason = info.ugcSeason
                     )
-                    loadComments(info.aid)
+                    loadComments(info.aid, _uiState.value.commentSortMode, commentsGeneration)
                     checkFavoured(info.aid)
                     if (isLoggedIn) {
                         checkFollowStatus(info.owner.mid)
@@ -195,31 +229,41 @@ class DetailViewModel(
             }
     }
 
-    private suspend fun loadComments(aid: Long, mode: Int = _uiState.value.commentSortMode) {
+    private suspend fun loadComments(aid: Long, mode: Int, requestGeneration: Long) {
+        if (!isCurrentCommentRequest(requestGeneration, commentsRequestGeneration)) return
         Log.d(BilibiliApp.TAG, "load comments: aid=$aid mode=$mode")
         _uiState.value = _uiState.value.copy(loadingComments = true)
         repository.getComments(aid, mode = mode)
             .onSuccess { commentList ->
-                val pinned = (commentList.topReplies ?: emptyList()).map { c ->
-                    c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
-                }
-                val pinnedRpids = pinned.map { it.rpid }.toSet()
-                val replies = (commentList.replies ?: emptyList())
-                    .filter { it.rpid !in pinnedRpids }
-                    .map { c ->
+                if (!isCurrentCommentRequest(requestGeneration, commentsRequestGeneration)) return@onSuccess
+                val pinned = appendUniqueComments(
+                    emptyList(),
+                    (commentList.topReplies ?: emptyList()).map { c ->
                         c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
                     }
+                )
+                val pinnedRpids = pinned.map { it.rpid }.toSet()
+                val replies = appendUniqueComments(
+                    emptyList(),
+                    (commentList.replies ?: emptyList())
+                        .filter { it.rpid !in pinnedRpids }
+                        .map { c ->
+                            c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                        }
+                )
                 val cursor = commentList.cursor
+                val pageState = resolveCommentPage(cursor, requestedCursor = 0)
                 Log.d(BilibiliApp.TAG, "comments loaded: ${replies.size} comments, ${pinned.size} pinned, cursor=${cursor}")
                 _uiState.value = _uiState.value.copy(
                     comments = replies,
                     pinnedComments = pinned,
-                    nextCursor = cursor?.next ?: 0,
-                    hasMoreComments = cursor?.isEnd != true,
+                    nextCursor = pageState.nextCursor,
+                    hasMoreComments = pageState.hasMore,
                     loadingComments = false
                 )
             }
             .onFailure {
+                if (!isCurrentCommentRequest(requestGeneration, commentsRequestGeneration)) return@onFailure
                 Log.e(BilibiliApp.TAG, "load comments failed", it)
                 _uiState.value = _uiState.value.copy(loadingComments = false)
             }
@@ -228,6 +272,7 @@ class DetailViewModel(
     fun setCommentSort(aid: Long, mode: Int) {
         val state = _uiState.value
         if (mode == state.commentSortMode) return
+        val requestGeneration = startCommentRequest()
         _uiState.value = state.copy(
             commentSortMode = mode,
             comments = null,
@@ -241,7 +286,7 @@ class DetailViewModel(
             togglingLikes = emptySet()
         )
         viewModelScope.launch {
-            loadComments(aid, mode)
+            loadComments(aid, mode, requestGeneration)
         }
     }
 
@@ -314,10 +359,13 @@ class DetailViewModel(
     fun loadMoreComments(aid: Long) {
         val state = _uiState.value
         if (state.loadingMore || !state.hasMoreComments) return
+        val requestedCursor = state.nextCursor
+        val requestGeneration = commentsRequestGeneration
         viewModelScope.launch {
             _uiState.value = state.copy(loadingMore = true)
-            repository.getComments(aid, page = state.nextCursor, mode = state.commentSortMode)
+            repository.getComments(aid, page = requestedCursor, mode = state.commentSortMode)
                 .onSuccess { commentList ->
+                    if (!isCurrentCommentRequest(requestGeneration, commentsRequestGeneration)) return@onSuccess
                     val pinnedRpids = _uiState.value.pinnedComments.map { it.rpid }.toSet()
                     val newReplies = (commentList.replies ?: emptyList())
                         .filter { it.rpid !in pinnedRpids }
@@ -325,15 +373,17 @@ class DetailViewModel(
                             c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
                         }
                     val cursor = commentList.cursor
+                    val pageState = resolveCommentPage(cursor, requestedCursor)
                     Log.d(BilibiliApp.TAG, "more comments loaded: ${newReplies.size} comments, cursor=${cursor}")
                     _uiState.value = _uiState.value.copy(
-                        comments = (_uiState.value.comments ?: emptyList()) + newReplies,
-                        nextCursor = cursor?.next ?: 0,
-                        hasMoreComments = cursor?.isEnd != true,
+                        comments = appendUniqueComments(_uiState.value.comments ?: emptyList(), newReplies),
+                        nextCursor = pageState.nextCursor,
+                        hasMoreComments = pageState.hasMore,
                         loadingMore = false
                     )
                 }
                 .onFailure {
+                    if (!isCurrentCommentRequest(requestGeneration, commentsRequestGeneration)) return@onFailure
                     Log.e(BilibiliApp.TAG, "load more comments failed", it)
                     _uiState.value = _uiState.value.copy(loadingMore = false)
                 }
@@ -360,9 +410,12 @@ class DetailViewModel(
             )
             repository.getReplies(aid, rpid, page = 1)
                 .onSuccess { commentList ->
-                    val items = (commentList.replies ?: emptyList()).map { c ->
-                        c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
-                    }
+                    val items = appendUniqueComments(
+                        emptyList(),
+                        (commentList.replies ?: emptyList()).map { c ->
+                            c.copy(content = c.content.copy(message = decodeHtmlEntities(c.content.message)))
+                        }
+                    )
                     _uiState.value = _uiState.value.copy(
                         replyThreads = _uiState.value.replyThreads + (rpid to ReplyThread(
                             items = items,
@@ -395,7 +448,7 @@ class DetailViewModel(
                     }
                     val cursor = commentList.cursor
                     val updated = thread.copy(
-                        items = thread.items + newItems,
+                        items = appendUniqueComments(thread.items, newItems),
                         currentPage = nextPage,
                         hasMore = cursor?.isEnd != true,
                         isLoading = false
