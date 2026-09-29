@@ -4,11 +4,15 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 
 object AppSettings {
     private const val PREFS_NAME = "bili_settings"
     private const val KEY_WIFI_ONLY_PLAYBACK = "wifi_only_playback"
     private const val KEY_WIFI_ONLY_DOWNLOAD = "wifi_only_download"
+    private const val KEY_THEME_MODE = "theme_mode"
 
     private lateinit var prefs: SharedPreferences
 
@@ -20,7 +24,17 @@ object AppSettings {
         if (!prefs.contains(KEY_WIFI_ONLY_DOWNLOAD)) {
             prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, true).apply()
         }
+        themeModeState = prefs.getInt(KEY_THEME_MODE, 0)
     }
+
+    private var themeModeState by mutableIntStateOf(0)
+
+    var themeMode: Int
+        get() = themeModeState
+        set(value) {
+            themeModeState = value
+            prefs.edit().putInt(KEY_THEME_MODE, value).apply()
+        }
 
     var wifiOnlyPlayback: Boolean
         get() = prefs.getBoolean(KEY_WIFI_ONLY_PLAYBACK, true)

@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +26,7 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.detail.NoteScreen
@@ -42,6 +44,7 @@ import com.bilibili.pure.ui.profile.ProfileScreen
 import com.bilibili.pure.ui.search.SearchScreen
 import com.bilibili.pure.ui.settings.SettingsScreen
 import com.bilibili.pure.ui.theme.BilibiliPureTheme
+import com.bilibili.pure.ui.theme.resolveDarkTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -55,7 +58,9 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         handleOpenDownloadsIntent(intent)
         setContent {
-            BilibiliPureTheme {
+            BilibiliPureTheme(
+                darkTheme = resolveDarkTheme(AppSettings.themeMode, isSystemInDarkTheme())
+            ) {
                 MainScreen(openDownloadsRequest)
             }
         }

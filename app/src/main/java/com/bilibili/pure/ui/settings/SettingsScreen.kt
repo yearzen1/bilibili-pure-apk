@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.*
@@ -26,6 +27,10 @@ import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.update.UpdateChecker
 import com.bilibili.pure.data.update.UpdateDownloader
 import com.bilibili.pure.data.update.UpdateInfo
+import com.bilibili.pure.ui.theme.THEME_DARK
+import com.bilibili.pure.ui.theme.THEME_FOLLOW_SYSTEM
+import com.bilibili.pure.ui.theme.THEME_LIGHT
+import com.bilibili.pure.ui.theme.themeModeLabels
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -112,6 +117,9 @@ private fun SettingsRow(
 fun SettingsScreen(onBack: () -> Unit = {}) {
     var wifiOnlyPlayback by remember { mutableStateOf(AppSettings.wifiOnlyPlayback) }
     var wifiOnlyDownload by remember { mutableStateOf(AppSettings.wifiOnlyDownload) }
+    val themeMode = AppSettings.themeMode
+    var themeDialogVisible by remember { mutableStateOf(false) }
+    var themeSelected by remember { mutableStateOf(themeMode) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -229,6 +237,34 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
+            SectionTitle("外观设置")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(SectionShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                SettingsRow(
+                    title = "深色模式",
+                    subtitle = "当前：${themeModeLabels[themeMode]}",
+                    leadingIcon = Icons.Outlined.DarkMode,
+                    onClick = {
+                        themeSelected = themeMode
+                        themeDialogVisible = true
+                    },
+                    trailing = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             SectionTitle("网络设置")
             Column(
                 modifier = Modifier
@@ -293,6 +329,47 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                 )
             }
         }
+    }
+
+    if (themeDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { themeDialogVisible = false },
+            title = { Text("深色模式") },
+            text = {
+                Column {
+                    listOf(THEME_FOLLOW_SYSTEM, THEME_LIGHT, THEME_DARK).forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    themeSelected = mode
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = themeSelected == mode,
+                                onClick = { themeSelected = mode }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = themeModeLabels.getValue(mode),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    AppSettings.themeMode = themeSelected
+                    themeDialogVisible = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { themeDialogVisible = false }) { Text("取消") }
+            }
+        )
     }
 
     when (val s = updateState) {
