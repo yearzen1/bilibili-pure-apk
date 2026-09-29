@@ -33,7 +33,11 @@ import com.bilibili.pure.data.model.SeasonArchiveItem
 import com.bilibili.pure.data.model.SeasonSummary
 import com.bilibili.pure.data.model.SpaceAccInfo
 import com.bilibili.pure.data.model.UserVideoItem
-import com.bilibili.pure.ui.search.formatCount
+import com.bilibili.pure.ui.common.VideoCard
+import com.bilibili.pure.ui.common.VideoCardSpec
+import com.bilibili.pure.util.fixPic
+import com.bilibili.pure.util.formatCount
+import com.bilibili.pure.util.formatDuration
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -477,6 +481,14 @@ internal fun SeasonCard(season: SeasonSummary, onClick: () -> Unit) {
     }
 }
 
+private val SeasonVideoSpec = VideoCardSpec(
+    author = false,
+    compact = true,
+    coverWidth = 120.dp,
+    coverHeight = 68.dp,
+    contentSpacing = 8.dp
+)
+
 @Composable
 internal fun SeasonVideoRow(item: SeasonArchiveItem, onClick: () -> Unit) {
     Card(
@@ -484,46 +496,13 @@ internal fun SeasonVideoRow(item: SeasonArchiveItem, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        Row(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = fixPic(item.pic),
-                contentDescription = item.title,
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(68.dp),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "${formatCount(item.stat?.view ?: 0)}播放",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatDuration(item.duration),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
+        VideoCard(
+            spec = SeasonVideoSpec,
+            coverUrl = item.pic,
+            title = item.title,
+            playCount = item.stat?.view ?: 0,
+            durationText = formatDuration(item.duration),
+            pubdate = item.pubdate
+        )
     }
-}
-
-internal fun formatDuration(seconds: Long): String {
-    val s = seconds.coerceAtLeast(0)
-    val h = s / 3600
-    val m = (s % 3600) / 60
-    val sec = s % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, sec)
-    else "%d:%02d".format(m, sec)
 }

@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.HistoryItem
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.util.fixPic
+import com.bilibili.pure.util.formatDuration
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -178,11 +180,7 @@ private fun HistoryCard(
     item: HistoryItem,
     onClick: () -> Unit
 ) {
-    val imageUrl = when {
-        (item.pic ?: "").startsWith("//") -> "https:${item.pic}"
-        (item.pic ?: "").startsWith("http://") -> "https:${item.pic?.removePrefix("http:")}"
-        else -> item.pic ?: ""
-    }
+    val imageUrl = fixPic(item.pic ?: "")
 
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
     val viewTime = remember(item.viewAt) { dateFormat.format(Date(item.viewAt * 1000)) }
@@ -268,8 +266,3 @@ private fun HistoryCard(
     }
 }
 
-private fun formatDuration(seconds: Long): String {
-    val min = seconds / 60
-    val sec = seconds % 60
-    return "%d:%02d".format(min, sec)
-}

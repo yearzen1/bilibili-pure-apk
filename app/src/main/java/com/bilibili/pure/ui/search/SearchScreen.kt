@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.SearchVideoItem
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.ui.common.VideoCard
+import com.bilibili.pure.ui.common.VideoCardSpec
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -340,72 +342,26 @@ private fun SortSelector(
     }
 }
 
+private val SearchVideoSpec = VideoCardSpec(selectable = true)
+
 @Composable
 fun SearchVideoCard(
     video: SearchVideoItem,
     onClick: () -> Unit
 ) {
-    val imageUrl = when {
-        video.pic.startsWith("//") -> "https:${video.pic}"
-        video.pic.startsWith("http://") -> "https:${video.pic.removePrefix("http:")}"
-        else -> video.pic
-    }
-
     DismissSelectionCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = video.title,
-                modifier = Modifier
-                    .size(width = 140.dp, height = 88.dp),
-                contentScale = ContentScale.Crop
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                SelectionContainer {
-                    Text(
-                        text = video.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                SelectionContainer {
-                    Text(
-                        text = video.author,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row {
-                    Text(
-                        text = "${formatCount(video.playCount)}播放",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = video.duration,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-internal fun formatCount(count: Long): String {
-    return when {
-        count >= 10000 -> "${count / 10000}万"
-        else -> count.toString()
+        VideoCard(
+            spec = SearchVideoSpec,
+            coverUrl = video.pic,
+            title = video.title,
+            author = video.author,
+            playCount = video.playCount,
+            durationText = video.duration,
+            pubdate = video.pubdate
+        )
     }
 }

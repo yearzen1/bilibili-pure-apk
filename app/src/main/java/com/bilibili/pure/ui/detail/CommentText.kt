@@ -17,12 +17,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.em
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.EmoteInfo
-
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
+import com.bilibili.pure.util.fixPic
 
 @Composable
 fun CommentText(

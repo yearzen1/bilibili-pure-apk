@@ -438,7 +438,8 @@ data class UserVideoItem(
     val pubdate: Long,
     val description: String,
     val mid: Long,
-    val author: String
+    val author: String,
+    val duration: String = ""
 ) {
     companion object {
         val deserializer = JsonDeserializer { json: JsonElement, _: Type, _: JsonDeserializationContext ->
@@ -459,10 +460,11 @@ data class UserVideoItem(
                 pic = obj.get("pic")?.asString ?: "",
                 playCount = safeLong("play"),
                 danmakuCount = safeLong("video_review"),
-                pubdate = obj.get("pubdate")?.asLong ?: 0L,
+                pubdate = safeLong("created").takeIf { it > 0 } ?: safeLong("pubdate"),
                 description = obj.get("description")?.asString ?: "",
-                mid = obj.get("mid")?.asLong ?: 0L,
-                author = obj.get("author")?.asString ?: ""
+                mid = safeLong("mid"),
+                author = obj.get("author")?.asString ?: "",
+                duration = obj.get("length")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
             )
         }
     }

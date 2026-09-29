@@ -22,15 +22,14 @@ import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.FavResourceItem
 import com.bilibili.pure.ui.common.DismissSelectionCard
-import com.bilibili.pure.ui.search.formatCount
+import com.bilibili.pure.ui.common.VideoCard
+import com.bilibili.pure.ui.common.VideoCardSpec
+import com.bilibili.pure.util.fixPic
+import com.bilibili.pure.util.formatDuration
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
+private val FavVideoSpec = VideoCardSpec(selectable = true)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -305,63 +304,14 @@ private fun ResourceCard(item: FavResourceItem, onClick: () -> Unit) {
         onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = fixPic(item.cover),
-                contentDescription = item.title,
-                modifier = Modifier
-                    .width(140.dp)
-                    .height(88.dp),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                SelectionContainer {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                SelectionContainer {
-                    Text(
-                        text = item.upper.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (item.cntInfo != null) {
-                        Text(
-                            text = "${formatCount(item.cntInfo.play)}播放",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${formatCount(item.cntInfo.danmaku)}弹幕",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (item.duration > 0) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatFavDuration(item.duration),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
+        VideoCard(
+            spec = FavVideoSpec,
+            coverUrl = item.cover,
+            title = item.title,
+            author = item.upper.name,
+            playCount = item.cntInfo?.play ?: 0,
+            durationText = if (item.duration > 0) formatDuration(item.duration) else "",
+            pubdate = item.pubtime
+        )
     }
-}
-
-private fun formatFavDuration(seconds: Long): String {
-    val min = seconds / 60
-    val sec = seconds % 60
-    return "%d:%02d".format(min, sec)
 }

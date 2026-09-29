@@ -25,12 +25,7 @@ import coil.compose.AsyncImage
 import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.model.DownloadInfo
 import com.bilibili.pure.ui.common.DismissSelectionCard
-
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
+import com.bilibili.pure.util.fixPic
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

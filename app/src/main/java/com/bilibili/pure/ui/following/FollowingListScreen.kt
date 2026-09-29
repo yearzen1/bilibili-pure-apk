@@ -17,13 +17,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FollowingItem
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.util.fixPic
 import kotlinx.coroutines.delay
-
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

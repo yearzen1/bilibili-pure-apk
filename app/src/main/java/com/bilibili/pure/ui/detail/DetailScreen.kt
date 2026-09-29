@@ -51,7 +51,11 @@ import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.model.VideoPage
 import com.bilibili.pure.ui.common.DismissSelectionCard
 import com.bilibili.pure.ui.common.DismissSelectionClickable
-import com.bilibili.pure.ui.search.formatCount
+import com.bilibili.pure.util.fixPic
+import com.bilibili.pure.util.formatCount
+import com.bilibili.pure.util.formatDuration
+import com.bilibili.pure.util.formatPubdate
+import com.bilibili.pure.util.formatPubdateCompact
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,12 +87,6 @@ import com.bilibili.pure.data.model.PlayUrlInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private fun fixPic(url: String): String = when {
-    url.startsWith("//") -> "https:$url"
-    url.startsWith("http://") -> "https:${url.removePrefix("http:")}"
-    else -> url
-}
 
 private fun fullResPic(url: String): String = fixPic(url).substringBefore("@")
 
@@ -567,12 +565,6 @@ private fun PageSelectionDialog(
     )
 }
 
-private fun formatDuration(seconds: Long): String {
-    val min = seconds / 60
-    val sec = seconds % 60
-    return "%d:%02d".format(min, sec)
-}
-
 @Composable
 private fun DetailContent(
     videoInfo: VideoInfo?,
@@ -728,9 +720,7 @@ private fun DetailContent(
                 }
 
                 item {
-                    val dateStr = if (videoInfo.pubdate > 0L) {
-                        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(videoInfo.pubdate * 1000))
-                    } else ""
+                    val dateStr = formatPubdate(videoInfo.pubdate)
                     Text(
                         text = "发布日期：$dateStr",
                         style = MaterialTheme.typography.bodySmall,
@@ -1123,7 +1113,12 @@ private fun CommentCard(
                             text = comment.member.uname,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { onUserClick(comment.member.mid) }
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .clickable { onUserClick(comment.member.mid) }
                         )
                         if (isPinned) {
                             Spacer(modifier = Modifier.width(4.dp))
@@ -1236,7 +1231,12 @@ private fun ReplyRow(
                     text = reply.member.uname,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onUserClick(reply.member.mid) }
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { onUserClick(reply.member.mid) }
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
@@ -1726,20 +1726,24 @@ private fun BottomSheetEpisodeRow(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "${formatCount(item.stat?.view ?: 0)}播放",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 if (item.pubdate > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.pubdate * 1000)),
+                        text = formatPubdateCompact(item.pubdate),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
