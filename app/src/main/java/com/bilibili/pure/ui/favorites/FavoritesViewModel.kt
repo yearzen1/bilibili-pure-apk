@@ -28,6 +28,9 @@ data class FavoritesUiState(
     val folderCovers: Map<Long, String> = emptyMap()
 )
 
+internal fun shouldLoadFolders(currentFolders: List<FavFolder>): Boolean =
+    currentFolders.isEmpty()
+
 class FavoritesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = BilibiliRepository()
@@ -38,6 +41,7 @@ class FavoritesViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadFolders() {
         val uid = prefs.getString("dede_userid", null)?.toLongOrNull() ?: return
+        if (!shouldLoadFolders(_uiState.value.folders)) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingFolders = true, error = null)
             repository.getFavFolders(uid)

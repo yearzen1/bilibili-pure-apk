@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -39,6 +40,8 @@ fun FavoritesScreen(
     viewModel: FavoritesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val folderListState = rememberLazyListState()
+    val resourceListState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
         viewModel.loadFolders()
@@ -78,6 +81,7 @@ fun FavoritesScreen(
                     isLoadingMore = uiState.isLoadingMore,
                     hasMore = uiState.hasMore,
                     error = uiState.error,
+                    listState = resourceListState,
                     onLoadMore = { viewModel.loadMore() },
                     onVideoClick = onVideoClick,
                     modifier = Modifier.padding(padding)
@@ -89,6 +93,7 @@ fun FavoritesScreen(
                     isLoading = uiState.isLoadingFolders,
                     error = uiState.error,
                     covers = uiState.folderCovers,
+                    listState = folderListState,
                     onFolderClick = { viewModel.selectFolder(it) },
                     modifier = Modifier.padding(padding)
                 )
@@ -103,6 +108,7 @@ private fun FolderListView(
     isLoading: Boolean,
     error: String?,
     covers: Map<Long, String>,
+    listState: LazyListState,
     onFolderClick: (FavFolder) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -124,6 +130,7 @@ private fun FolderListView(
         }
         else -> {
             LazyColumn(
+                state = listState,
                 modifier = modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -200,12 +207,11 @@ private fun ResourceListView(
     isLoadingMore: Boolean,
     hasMore: Boolean,
     error: String?,
+    listState: LazyListState,
     onLoadMore: () -> Unit,
     onVideoClick: (bvid: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
-
     val nearBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
