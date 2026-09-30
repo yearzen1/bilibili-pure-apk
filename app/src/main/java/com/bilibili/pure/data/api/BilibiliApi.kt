@@ -162,7 +162,8 @@ interface BilibiliApi {
         @Query("media_id") mediaId: Long,
         @Query("pn") pn: Int = 1,
         @Query("ps") ps: Int = 20,
-        @Query("platform") platform: String = "web"
+        @Query("platform") platform: String = "web",
+        @Query("keyword") keyword: String? = null
     ): ApiResponse<FavResourceList>
 
     @GET("x/v2/fav/video/favoured")
@@ -194,6 +195,16 @@ interface BilibiliApi {
         @Query("vmid") vmid: Long,
         @Query("ps") pageSize: Int = 50,
         @Query("pn") page: Int = 1
+    ): ApiResponse<FollowingListData>
+
+    @GET("x/relation/followings/search")
+    suspend fun searchFollowings(
+        @Query("vmid") vmid: Long,
+        @Query("name") name: String,
+        @Query("pn") page: Int = 1,
+        @Query("ps") pageSize: Int = 20,
+        @Query("order") order: String = "desc",
+        @Query("order_type") orderType: String = "attention"
     ): ApiResponse<FollowingListData>
 
     @GET("x/relation/stat")

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +34,7 @@ import com.bilibili.pure.data.model.SeasonArchiveItem
 import com.bilibili.pure.data.model.SeasonSummary
 import com.bilibili.pure.data.model.SpaceAccInfo
 import com.bilibili.pure.data.model.UserVideoItem
+import com.bilibili.pure.ui.common.ScrollToTopFab
 import com.bilibili.pure.ui.common.VideoCard
 import com.bilibili.pure.ui.common.VideoCardSpec
 import com.bilibili.pure.util.fixPic
@@ -153,15 +155,20 @@ fun ChannelScreen(
             )
         }
     ) { padding ->
-        ChannelBody(
-            uiState = uiState,
-            onVideoClick = onVideoClick,
-            onSeasonClick = { seasonId, firstBvid -> viewModel.openSeason(seasonId, firstBvid) },
-            onSwitchMode = { mode -> viewModel.switchMode(mode) },
-            onLoadMore = { viewModel.loadMore() },
-            onToggleFollow = { viewModel.toggleFollow() },
-            modifier = Modifier.padding(padding)
-        )
+        val listState = rememberLazyListState()
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            ChannelBody(
+                uiState = uiState,
+                onVideoClick = onVideoClick,
+                onSeasonClick = { seasonId, firstBvid -> viewModel.openSeason(seasonId, firstBvid) },
+                onSwitchMode = { mode -> viewModel.switchMode(mode) },
+                onLoadMore = { viewModel.loadMore() },
+                onToggleFollow = { viewModel.toggleFollow() },
+                listState = listState,
+                modifier = Modifier.fillMaxSize()
+            )
+            ScrollToTopFab(listState = listState)
+        }
     }
 }
 
@@ -173,9 +180,9 @@ internal fun ChannelBody(
     onSwitchMode: (ChannelViewMode) -> Unit,
     onLoadMore: () -> Unit,
     onToggleFollow: () -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
     val nearBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo

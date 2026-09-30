@@ -238,10 +238,10 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "addFavFolder failed", it) }
     }
 
-    suspend fun getFavResources(mediaId: Long, page: Int = 1): Result<Pair<List<FavResourceItem>, Boolean>> {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources: mediaId=$mediaId page=$page")
+    suspend fun getFavResources(mediaId: Long, page: Int = 1, keyword: String? = null): Result<Pair<List<FavResourceItem>, Boolean>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources: mediaId=$mediaId page=$page keyword=$keyword")
         return runCatching<Pair<List<FavResourceItem>, Boolean>> {
-            val response = api.getFavResources(mediaId = mediaId, pn = page)
+            val response = api.getFavResources(mediaId = mediaId, pn = page, keyword = keyword)
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources response: code=${response.code} msg=${response.message}")
             if (response.code == 0) {
                 val data = response.data
@@ -427,6 +427,20 @@ class BilibiliRepository(
                 throw Exception(response.message)
             }
         }.onFailure { Log.e(BilibiliApp.TAG, "getFollowings failed", it) }
+    }
+
+    suspend fun searchFollowings(vmid: Long, name: String, page: Int = 1): Result<Pair<List<FollowingItem>, Int>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchFollowings: vmid=$vmid name=$name page=$page")
+        return runCatching<Pair<List<FollowingItem>, Int>> {
+            val response = api.searchFollowings(vmid = vmid, name = name, page = page)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "searchFollowings response: code=${response.code}")
+            if (response.code == 0) {
+                val data = response.data
+                Pair(data?.list ?: emptyList(), data?.total ?: 0)
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "searchFollowings failed", it) }
     }
 
     suspend fun getRelationStat(vmid: Long): Result<RelationStat> {

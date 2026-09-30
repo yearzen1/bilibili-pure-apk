@@ -18,7 +18,8 @@ data class FollowingUiState(
     val error: String? = null,
     val currentPage: Int = 1,
     val total: Int = 0,
-    val loadingMore: Boolean = false
+    val loadingMore: Boolean = false,
+    val searchQuery: String? = null
 )
 
 class FollowingListViewModel(
@@ -59,9 +60,15 @@ class FollowingListViewModel(
         val uid = loggedInUid ?: return
         if (state.loadingMore || state.items.size >= state.total) return
         val nextPage = state.currentPage + 1
+        val keyword = state.searchQuery
         viewModelScope.launch {
             _uiState.value = state.copy(loadingMore = true)
-            repository.getFollowings(uid, page = nextPage)
+            val result = if (keyword != null) {
+                repository.searchFollowings(uid, keyword, page = nextPage)
+            } else {
+                repository.getFollowings(uid, page = nextPage)
+            }
+            result
                 .onSuccess { (items, _) ->
                     _uiState.value = _uiState.value.copy(
                         items = _uiState.value.items + items,
@@ -71,6 +78,58 @@ class FollowingListViewModel(
                 }
                 .onFailure {
                     _uiState.value = _uiState.value.copy(loadingMore = false)
+                }
+        }
+    }
+
+    fun search(name: String) {
+        val uid = getLoggedInUid() ?: run {
+            _uiState.value = FollowingUiState(error = "未登录")
+            return
+        }
+        loggedInUid = uid
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                error = null,
+                searchQuery = name,
+                loadingMore = false
+            )
+            repository.searchFollowings(uid, name)
+                .onSuccess { (items, total) ->
+                    _uiState.value = FollowingUiState(
+                        items = items,
+                        currentPage = 1,
+                        total = total,
+                        searchQuery = name
+                    )
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "search followings failed", e)
+                    _uiState.value = FollowingUiState(
+                        error = e.message ?: "搜索失败",
+                        searchQuery = name
+                    )
+                }
+        }
+    }
+
+    fun clearSearch() {
+        val uid = loggedInUid ?: getLoggedInUid() ?: return
+        loggedInUid = uid
+        viewModelScope.launch {
+            _uiState.value = FollowingUiState(isLoading = true)
+            repository.getFollowings(uid)
+                .onSuccess { (items, total) ->
+                    _uiState.value = FollowingUiState(
+                        items = items,
+                        currentPage = 1,
+                        total = total
+                    )
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "clear search reload failed", e)
+                    _uiState.value = FollowingUiState(error = e.message ?: "加载失败")
                 }
         }
     }

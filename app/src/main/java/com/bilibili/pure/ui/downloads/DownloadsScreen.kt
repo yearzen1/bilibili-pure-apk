@@ -1,9 +1,11 @@
 package com.bilibili.pure.ui.downloads
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,7 +26,11 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.model.DownloadInfo
+import com.bilibili.pure.ui.common.AppBarSearchActions
+import com.bilibili.pure.ui.common.AppBarSearchTitle
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.ui.common.ScrollToTopFab
+import com.bilibili.pure.ui.common.rememberAppBarSearchState
 import com.bilibili.pure.util.fixPic
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +43,9 @@ fun DownloadsScreen(
 ) {
     val items by viewModel.items.collectAsState()
     val context = LocalContext.current
+    val searchState = rememberAppBarSearchState()
+    val listState = rememberLazyListState()
+    val displayItems = filterDownloadItems(items, searchState.query)
     var confirmResume by remember { mutableStateOf<DownloadInfo?>(null) }
     var confirmDelete by remember { mutableStateOf<DownloadInfo?>(null) }
     var confirmDeleteGroup by remember { mutableStateOf<DownloadGroup?>(null) }
@@ -45,6 +54,10 @@ fun DownloadsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.load()
+    }
+
+    BackHandler(searchState.isSearching) {
+        searchState.exit()
     }
 
     fun requestResume(download: DownloadInfo) {
@@ -58,9 +71,22 @@ fun DownloadsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("我的下载") },
+                title = {
+                    AppBarSearchTitle(
+                        state = searchState,
+                        normalTitle = "我的下载",
+                        placeholder = "搜索下载视频",
+                        onSearch = { /* 本地过滤实时生效，无需提交动作 */ }
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (searchState.isSearching) {
+                            searchState.exit()
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -75,41 +101,62 @@ fun DownloadsScreen(
                             Text("清除已完成", style = MaterialTheme.typography.labelMedium)
                         }
                     }
+                    AppBarSearchActions(searchState)
                 }
             )
         }
     ) { padding ->
-        if (items.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        when {
+            items.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "暂无下载",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "在视频详情页点击下载按钮开始下载",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            displayItems.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "暂无下载",
+                        text = "未找到匹配的下载",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "在视频详情页点击下载按钮开始下载",
-                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(
-                    items,
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            displayItems,
                     key = {
                         when (it) {
                             is DownloadListItem.Single -> it.download.id
@@ -147,7 +194,11 @@ fun DownloadsScreen(
                     }
                 }
             }
+
+            ScrollToTopFab(listState = listState)
         }
+    }
+    }
     }
 
     confirmResume?.let { dl ->

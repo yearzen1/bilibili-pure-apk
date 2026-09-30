@@ -1,5 +1,6 @@
 package com.bilibili.pure.ui.following
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +17,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FollowingItem
+import com.bilibili.pure.ui.common.AppBarSearchActions
+import com.bilibili.pure.ui.common.AppBarSearchTitle
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.ui.common.ScrollToTopFab
+import com.bilibili.pure.ui.common.rememberAppBarSearchState
 import com.bilibili.pure.util.fixPic
 import kotlinx.coroutines.delay
 
@@ -28,19 +33,54 @@ fun FollowingListScreen(
     viewModel: FollowingListViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val searchState = rememberAppBarSearchState()
+    val searchActive = searchState.isSearching || uiState.searchQuery != null
+
+    fun exitSearch() {
+        searchState.exit()
+        if (uiState.searchQuery != null) {
+            viewModel.clearSearch()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.load()
     }
 
+    BackHandler(searchActive) {
+        exitSearch()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("我的关注") },
+                title = {
+                    AppBarSearchTitle(
+                        state = searchState,
+                        normalTitle = "我的关注",
+                        placeholder = "搜索UP主",
+                        onSearch = { query ->
+                            if (query.isEmpty()) {
+                                viewModel.clearSearch()
+                            } else {
+                                viewModel.search(query)
+                            }
+                        }
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (searchActive) {
+                            exitSearch()
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
+                },
+                actions = {
+                    AppBarSearchActions(searchState)
                 }
             )
         }
@@ -67,7 +107,10 @@ fun FollowingListScreen(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("还没有关注任何UP主", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = if (uiState.searchQuery != null) "未找到相关UP主" else "还没有关注任何UP主",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
             }
             else -> {
@@ -114,12 +157,13 @@ private fun FollowingList(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         items(items, key = { it.mid }) { item ->
             var showUnfollowConfirm by remember { mutableStateOf(false) }
 
@@ -166,6 +210,9 @@ private fun FollowingList(
                 }
             }
         }
+    }
+
+    ScrollToTopFab(listState = listState)
     }
 }
 

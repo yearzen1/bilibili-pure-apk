@@ -11,7 +11,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,12 +21,15 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.FavResourceItem
+import com.bilibili.pure.ui.common.AppBarSearchActions
+import com.bilibili.pure.ui.common.AppBarSearchTitle
 import com.bilibili.pure.ui.common.DismissSelectionCard
+import com.bilibili.pure.ui.common.ScrollToTopFab
 import com.bilibili.pure.ui.common.VideoCard
 import com.bilibili.pure.ui.common.VideoCardSpec
+import com.bilibili.pure.ui.common.rememberAppBarSearchState
 import com.bilibili.pure.util.fixPic
 import com.bilibili.pure.util.formatDuration
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val FavVideoSpec = VideoCardSpec(selectable = true)
@@ -42,39 +44,66 @@ fun FavoritesScreen(
     val uiState by viewModel.uiState.collectAsState()
     val folderListState = rememberLazyListState()
     val resourceListState = rememberLazyListState()
+    val searchState = rememberAppBarSearchState()
+
+    val inFolder = uiState.selectedFolderId != null
+    val searchActive = searchState.isSearching || uiState.searchKeyword != null
 
     LaunchedEffect(Unit) {
         viewModel.loadFolders()
     }
 
-    if (uiState.selectedFolderId != null) {
-        BackHandler {
-            viewModel.backToFolders()
+    LaunchedEffect(uiState.searchKeyword, uiState.currentPage) {
+        if (uiState.currentPage == 1) resourceListState.scrollToItem(0)
+    }
+
+    fun handleBack() {
+        when {
+            searchActive -> {
+                searchState.exit()
+                viewModel.clearFavSearch()
+            }
+            inFolder -> viewModel.backToFolders()
+            else -> onBack()
         }
     }
 
-    val title = if (uiState.selectedFolderId != null) uiState.selectedFolderTitle else "我的收藏"
+    BackHandler(inFolder || searchActive) {
+        handleBack()
+    }
+
+    val title = if (inFolder) uiState.selectedFolderTitle else "我的收藏"
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (uiState.selectedFolderId != null) {
-                            viewModel.backToFolders()
-                        } else {
-                            onBack()
+                title = {
+                    AppBarSearchTitle(
+                        state = searchState,
+                        normalTitle = title,
+                        placeholder = "搜索收藏夹视频",
+                        onSearch = { query ->
+                            if (query.isEmpty()) {
+                                viewModel.clearFavSearch()
+                            } else {
+                                viewModel.searchFav(query)
+                            }
                         }
-                    }) {
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { handleBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
+                },
+                actions = {
+                    AppBarSearchActions(searchState)
                 }
             )
         }
     ) { padding ->
         when {
-            uiState.selectedFolderId != null -> {
+            inFolder -> {
                 ResourceListView(
                     resources = uiState.resources,
                     isLoading = uiState.isLoadingResources,
@@ -82,19 +111,29 @@ fun FavoritesScreen(
                     hasMore = uiState.hasMore,
                     error = uiState.error,
                     listState = resourceListState,
+                    emptyText = if (uiState.searchKeyword != null) "未找到相关视频" else "收藏夹为空",
                     onLoadMore = { viewModel.loadMore() },
                     onVideoClick = onVideoClick,
                     modifier = Modifier.padding(padding)
                 )
             }
             else -> {
+                val displayFolders = filterFolders(uiState.folders, searchState.query)
                 FolderListView(
-                    folders = uiState.folders,
+                    folders = displayFolders,
                     isLoading = uiState.isLoadingFolders,
                     error = uiState.error,
                     covers = uiState.folderCovers,
                     listState = folderListState,
-                    onFolderClick = { viewModel.selectFolder(it) },
+                    emptyText = if (uiState.folders.isNotEmpty() && displayFolders.isEmpty()) {
+                        "未找到匹配的收藏夹"
+                    } else {
+                        "暂无收藏夹"
+                    },
+                    onFolderClick = {
+                        searchState.exit()
+                        viewModel.selectFolder(it)
+                    },
                     modifier = Modifier.padding(padding)
                 )
             }
@@ -109,6 +148,7 @@ private fun FolderListView(
     error: String?,
     covers: Map<Long, String>,
     listState: LazyListState,
+    emptyText: String = "暂无收藏夹",
     onFolderClick: (FavFolder) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -125,29 +165,32 @@ private fun FolderListView(
         }
         folders.isEmpty() -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("暂无收藏夹")
+                Text(emptyText)
             }
         }
         else -> {
-            LazyColumn(
-                state = listState,
-                modifier = modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item(key = "header") {
-                    Text(
-                        text = "共 ${folders.size} 个收藏夹",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+            Box(modifier = modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item(key = "header") {
+                        Text(
+                            text = "共 ${folders.size} 个收藏夹",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    items(folders, key = { it.id }) { folder ->
+                        FolderCard(
+                            folder = folder,
+                            coverUrl = covers[folder.id] ?: folder.cover,
+                            onClick = { onFolderClick(folder) }
+                        )
+                    }
                 }
-                items(folders, key = { it.id }) { folder ->
-                    FolderCard(
-                        folder = folder,
-                        coverUrl = covers[folder.id] ?: folder.cover,
-                        onClick = { onFolderClick(folder) }
-                    )
-                }
+                ScrollToTopFab(listState = listState)
             }
         }
     }
@@ -208,6 +251,7 @@ private fun ResourceListView(
     hasMore: Boolean,
     error: String?,
     listState: LazyListState,
+    emptyText: String = "收藏夹为空",
     onLoadMore: () -> Unit,
     onVideoClick: (bvid: String) -> Unit,
     modifier: Modifier = Modifier
@@ -227,11 +271,6 @@ private fun ResourceListView(
         }
     }
 
-    val scope = rememberCoroutineScope()
-    val showScrollToTop by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 2 && resources.isNotEmpty() }
-    }
-
     when {
         isLoading -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -245,7 +284,7 @@ private fun ResourceListView(
         }
         resources.isEmpty() -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("收藏夹为空")
+                Text(emptyText)
             }
         }
         else -> {
@@ -293,17 +332,7 @@ private fun ResourceListView(
                     }
                 }
 
-                if (showScrollToTop) {
-                    FloatingActionButton(
-                        onClick = { scope.launch { listState.scrollToItem(0) } },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
-                    }
-                }
+                ScrollToTopFab(listState = listState)
             }
         }
     }

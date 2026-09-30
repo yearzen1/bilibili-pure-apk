@@ -20,6 +20,22 @@ sealed class DownloadListItem {
     data class Single(val download: DownloadInfo) : DownloadListItem()
 }
 
+internal fun filterDownloadItems(items: List<DownloadListItem>, query: String): List<DownloadListItem> {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return items
+    return items.filter { item ->
+        when (item) {
+            is DownloadListItem.Single -> matchesDownload(item.download, q)
+            is DownloadListItem.Group ->
+                item.group.title.lowercase().contains(q) ||
+                    item.group.downloads.any { matchesDownload(it, q) }
+        }
+    }
+}
+
+private fun matchesDownload(download: DownloadInfo, query: String): Boolean =
+    download.title.lowercase().contains(query) || download.part.lowercase().contains(query)
+
 class DownloadsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val downloadManager = DownloadManager.getInstance(application)

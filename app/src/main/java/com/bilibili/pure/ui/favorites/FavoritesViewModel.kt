@@ -25,11 +25,18 @@ data class FavoritesUiState(
     val error: String? = null,
     val hasMore: Boolean = false,
     val currentPage: Int = 1,
-    val folderCovers: Map<Long, String> = emptyMap()
+    val folderCovers: Map<Long, String> = emptyMap(),
+    val searchKeyword: String? = null
 )
 
 internal fun shouldLoadFolders(currentFolders: List<FavFolder>): Boolean =
     currentFolders.isEmpty()
+
+internal fun filterFolders(folders: List<FavFolder>, query: String): List<FavFolder> {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return folders
+    return folders.filter { it.title.lowercase().contains(q) }
+}
 
 class FavoritesViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -70,16 +77,45 @@ class FavoritesViewModel(application: Application) : AndroidViewModel(applicatio
             isLoadingResources = true,
             error = null,
             currentPage = 1,
-            hasMore = false
+            hasMore = false,
+            searchKeyword = null
         )
         loadResources(folder.id, page = 1)
+    }
+
+    fun searchFav(keyword: String) {
+        val folderId = _uiState.value.selectedFolderId ?: return
+        _uiState.value = _uiState.value.copy(
+            resources = emptyList(),
+            isLoadingResources = true,
+            error = null,
+            currentPage = 1,
+            hasMore = false,
+            searchKeyword = keyword
+        )
+        loadResources(folderId, page = 1)
+    }
+
+    fun clearFavSearch() {
+        val folderId = _uiState.value.selectedFolderId ?: return
+        if (_uiState.value.searchKeyword == null) return
+        _uiState.value = _uiState.value.copy(
+            resources = emptyList(),
+            isLoadingResources = true,
+            error = null,
+            currentPage = 1,
+            hasMore = false,
+            searchKeyword = null
+        )
+        loadResources(folderId, page = 1)
     }
 
     fun backToFolders() {
         _uiState.value = _uiState.value.copy(
             selectedFolderId = null,
             selectedFolderTitle = "",
-            resources = emptyList()
+            resources = emptyList(),
+            searchKeyword = null
         )
     }
 
@@ -92,13 +128,14 @@ class FavoritesViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun loadResources(mediaId: Long, page: Int) {
+        val keyword = _uiState.value.searchKeyword
         viewModelScope.launch {
             if (page == 1) {
                 _uiState.value = _uiState.value.copy(isLoadingResources = true)
             } else {
                 _uiState.value = _uiState.value.copy(isLoadingMore = true)
             }
-            repository.getFavResources(mediaId, page = page)
+            repository.getFavResources(mediaId, page = page, keyword = keyword)
                 .onSuccess { (resources, hasMore) ->
                     val current = _uiState.value
                     _uiState.value = current.copy(
