@@ -7,6 +7,7 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.model.CommentCursor
 import com.bilibili.pure.data.model.CommentItem
+import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.SeasonArchiveItem
 import com.bilibili.pure.data.model.SeasonMeta
 import com.bilibili.pure.data.model.UgcSeason
@@ -46,6 +47,37 @@ internal fun isCurrentCommentRequest(
     currentGeneration: Long
 ): Boolean = requestGeneration == currentGeneration
 
+internal data class FavDealParams(
+    val addMediaIds: String,
+    val delMediaIds: String
+)
+
+internal fun parseDedeUserId(cookies: String): Long? = cookies
+    .split(";")
+    .firstOrNull { it.trim().startsWith("DedeUserID=") }
+    ?.substringAfter("DedeUserID=")
+    ?.trim()
+    ?.toLongOrNull()
+
+internal fun pickDefaultFolderId(folders: List<FavFolder>): Long? {
+    if (folders.isEmpty()) return null
+    val default = folders.firstOrNull { (it.attr and 0b10) == 0 }
+    return (default ?: folders.first()).id
+}
+
+internal fun favDealParams(favor: Boolean, folderIds: List<Long>): FavDealParams? {
+    if (folderIds.isEmpty()) return null
+    val ids = folderIds.joinToString(",")
+    return if (favor) {
+        FavDealParams(addMediaIds = ids, delMediaIds = "")
+    } else {
+        FavDealParams(addMediaIds = "", delMediaIds = ids)
+    }
+}
+
+internal fun favouredFolderIds(folders: List<FavFolder>): List<Long> =
+    folders.filter { it.favState != 0 }.map { it.id }
+
 data class ReplyThread(
     val items: List<CommentItem> = emptyList(),
     val currentPage: Int = 1,
@@ -73,7 +105,13 @@ data class DetailUiState(
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
-    private val defaultFolderId: Long? = null,
+    val favPickerVisible: Boolean = false,
+    val favPickerLoading: Boolean = false,
+    val favFolders: List<FavFolder> = emptyList(),
+    val selectedFolderId: Long? = null,
+    val showCreateFolder: Boolean = false,
+    val creatingFolder: Boolean = false,
+    val favError: String? = null,
     val ugcSeason: UgcSeason? = null,
     // Collection pagination state
     val collectionEpisodes: List<SeasonArchiveItem> = emptyList(),
@@ -82,10 +120,7 @@ data class DetailUiState(
     val collectionHasMore: Boolean = true,
     val collectionLoadingMore: Boolean = false,
     val collectionSortDesc: Boolean = true
-) {
-    fun getDefaultFolderId() = defaultFolderId
-    fun withDefaultFolderId(id: Long) = copy(defaultFolderId = id)
-}
+)
 
 class DetailViewModel(
     private val repository: BilibiliRepository = BilibiliRepository()
@@ -173,60 +208,184 @@ class DetailViewModel(
         }
     }
 
-    fun toggleFavorite(aid: Long) {
+    fun onFavoriteClick(aid: Long) {
         val state = _uiState.value
         if (state.isTogglingFavorite) return
-        _uiState.value = state.copy(isTogglingFavorite = true)
-
-        viewModelScope.launch {
-            var folderId = state.getDefaultFolderId()
-
-            if (folderId == null) {
-                val uid = BilibiliApi.loginCookies
-                    .split(";").firstOrNull { it.trim().startsWith("DedeUserID=") }
-                    ?.substringAfter("DedeUserID=")?.trim()?.toLongOrNull()
-                if (uid == null) {
-                    _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
-                    return@launch
-                }
-                repository.getFavFolders(uid)
-                    .onSuccess { folders ->
-                        val id = folders.firstOrNull()?.id
-                        if (id != null) {
-                            _uiState.value = _uiState.value.withDefaultFolderId(id)
-                            doToggleFavorite(aid, id)
-                        } else {
-                            _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
-                        }
-                    }
-                    .onFailure {
-                        _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
-                    }
-            } else {
-                doToggleFavorite(aid, folderId)
-            }
+        if (!state.isLoggedIn) return
+        if (state.isFavorited) {
+            cancelFavorite(aid)
+        } else {
+            openFavPicker(aid)
         }
     }
 
-    private suspend fun doToggleFavorite(aid: Long, folderId: Long) {
-        val state = _uiState.value
-        val add = if (state.isFavorited) "" else folderId.toString()
-        val del = if (state.isFavorited) folderId.toString() else ""
+    private fun favUid(): Long? = parseDedeUserId(BilibiliApi.loginCookies)
 
-        repository.dealFavResource(rid = aid, addMediaIds = add, delMediaIds = del)
-            .onSuccess {
-                val newFav = !state.isFavorited
-                val newCount = state.favoriteCount + if (newFav) 1 else -1
-                _uiState.value = _uiState.value.copy(
-                    isFavorited = newFav,
-                    favoriteCount = maxOf(0L, newCount),
-                    isTogglingFavorite = false
-                )
-            }
-            .onFailure { e ->
-                Log.e(BilibiliApp.TAG, "toggleFavorite failed", e)
-                _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
-            }
+    private fun openFavPicker(aid: Long) {
+        val uid = favUid() ?: return
+        val state = _uiState.value
+        if (state.favPickerVisible) return
+        _uiState.value = state.copy(
+            favPickerVisible = true,
+            favPickerLoading = true,
+            isTogglingFavorite = true
+        )
+        viewModelScope.launch {
+            repository.getFavFolders(uid, rid = aid)
+                .onSuccess { folders ->
+                    _uiState.value = _uiState.value.copy(
+                        favPickerLoading = false,
+                        favFolders = folders,
+                        selectedFolderId = pickDefaultFolderId(folders),
+                        isTogglingFavorite = false
+                    )
+                    Log.d(BilibiliApp.TAG, "favPicker loaded: ${folders.size} folders")
+                }
+                .onFailure {
+                    Log.e(BilibiliApp.TAG, "openFavPicker failed", it)
+                    _uiState.value = _uiState.value.copy(
+                        favPickerVisible = false,
+                        favPickerLoading = false,
+                        isTogglingFavorite = false,
+                        favError = it.message ?: "加载收藏夹失败"
+                    )
+                }
+        }
+    }
+
+    fun clearFavError() {
+        _uiState.value = _uiState.value.copy(favError = null)
+    }
+
+    fun dismissFavPicker() {
+        _uiState.value = _uiState.value.copy(
+            favPickerVisible = false,
+            showCreateFolder = false
+        )
+    }
+
+    fun selectFavFolder(id: Long) {
+        _uiState.value = _uiState.value.copy(selectedFolderId = id)
+    }
+
+    fun confirmFavorite(aid: Long) {
+        val state = _uiState.value
+        if (state.isTogglingFavorite) return
+        val folderId = state.selectedFolderId ?: return
+        val params = favDealParams(favor = true, folderIds = listOf(folderId)) ?: return
+        _uiState.value = state.copy(isTogglingFavorite = true)
+        viewModelScope.launch {
+            repository.dealFavResource(
+                rid = aid,
+                addMediaIds = params.addMediaIds,
+                delMediaIds = params.delMediaIds
+            )
+                .onSuccess {
+                    val s = _uiState.value
+                    _uiState.value = s.copy(
+                        isFavorited = true,
+                        favoriteCount = s.favoriteCount + 1,
+                        isTogglingFavorite = false,
+                        favPickerVisible = false,
+                        showCreateFolder = false
+                    )
+                    Log.d(BilibiliApp.TAG, "favorite added: folderId=$folderId")
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "confirmFavorite failed", e)
+                    _uiState.value = _uiState.value.copy(
+                        isTogglingFavorite = false,
+                        favError = e.message ?: "收藏失败"
+                    )
+                }
+        }
+    }
+
+    private fun cancelFavorite(aid: Long) {
+        val uid = favUid() ?: return
+        _uiState.value = _uiState.value.copy(isTogglingFavorite = true)
+        viewModelScope.launch {
+            repository.getFavFolders(uid, rid = aid)
+                .onSuccess { folders ->
+                    var ids = favouredFolderIds(folders)
+                    if (ids.isEmpty()) {
+                        ids = listOfNotNull(pickDefaultFolderId(folders))
+                    }
+                    val params = favDealParams(favor = false, folderIds = ids)
+                    if (params == null) {
+                        _uiState.value = _uiState.value.copy(isTogglingFavorite = false)
+                        return@onSuccess
+                    }
+                    repository.dealFavResource(
+                        rid = aid,
+                        addMediaIds = params.addMediaIds,
+                        delMediaIds = params.delMediaIds
+                    )
+                        .onSuccess {
+                            val s = _uiState.value
+                            _uiState.value = s.copy(
+                                isFavorited = false,
+                                favoriteCount = maxOf(0L, s.favoriteCount - 1),
+                                isTogglingFavorite = false
+                            )
+                            Log.d(BilibiliApp.TAG, "favorite removed: folderIds=${params.delMediaIds}")
+                        }
+                        .onFailure { e ->
+                            Log.e(BilibiliApp.TAG, "cancelFavorite failed", e)
+                            _uiState.value = _uiState.value.copy(
+                                isTogglingFavorite = false,
+                                favError = e.message ?: "取消收藏失败"
+                            )
+                        }
+                }
+                .onFailure {
+                    Log.e(BilibiliApp.TAG, "cancelFavorite load folders failed", it)
+                    _uiState.value = _uiState.value.copy(
+                        isTogglingFavorite = false,
+                        favError = it.message ?: "取消收藏失败"
+                    )
+                }
+        }
+    }
+
+    fun openCreateFolder() {
+        _uiState.value = _uiState.value.copy(showCreateFolder = true)
+    }
+
+    fun dismissCreateFolder() {
+        _uiState.value = _uiState.value.copy(showCreateFolder = false)
+    }
+
+    fun createFavFolder(aid: Long, title: String, intro: String, privacy: Int) {
+        val state = _uiState.value
+        if (state.creatingFolder) return
+        if (title.isBlank()) return
+        _uiState.value = state.copy(creatingFolder = true)
+        viewModelScope.launch {
+            repository.addFavFolder(title = title.trim(), intro = intro, privacy = privacy)
+                .onSuccess { newId ->
+                    val s = _uiState.value
+                    _uiState.value = s.copy(
+                        creatingFolder = false,
+                        showCreateFolder = false,
+                        favFolders = s.favFolders + FavFolder(
+                            id = newId,
+                            title = title.trim(),
+                            mediaCount = 0
+                        ),
+                        selectedFolderId = newId
+                    )
+                    Log.d(BilibiliApp.TAG, "favFolder created: id=$newId title=$title")
+                    confirmFavorite(aid)
+                }
+                .onFailure { e ->
+                    Log.e(BilibiliApp.TAG, "createFavFolder failed", e)
+                    _uiState.value = _uiState.value.copy(
+                        creatingFolder = false,
+                        favError = e.message ?: "创建收藏夹失败"
+                    )
+                }
+        }
     }
 
     private suspend fun loadComments(aid: Long, mode: Int, requestGeneration: Long) {

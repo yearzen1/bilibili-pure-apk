@@ -192,10 +192,14 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getSeasonArchivesViaView failed", it) }
     }
 
-    suspend fun getFavFolders(upMid: Long): Result<List<FavFolder>> {
-        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid")
+    suspend fun getFavFolders(upMid: Long, rid: Long? = null): Result<List<FavFolder>> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid rid=$rid")
         return runCatching {
-            val response = api.getFavFolders(upMid = upMid)
+            val response = api.getFavFolders(
+                upMid = upMid,
+                type = if (rid != null) 2 else 0,
+                rid = rid
+            )
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders response: code=${response.code} msg=${response.message}")
             if (response.code == 0) {
                 response.data?.list ?: emptyList()
@@ -203,6 +207,27 @@ class BilibiliRepository(
                 throw Exception(response.message)
             }
         }.onFailure { Log.e(BilibiliApp.TAG, "getFavFolders failed", it) }
+    }
+
+    suspend fun addFavFolder(title: String, intro: String = "", privacy: Int = 0): Result<Long> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "addFavFolder: title=$title privacy=$privacy")
+        return runCatching {
+            if (BilibiliApi.biliJct.isEmpty()) throw Exception("未登录")
+            val response = api.addFavFolder(
+                title = title,
+                intro = intro,
+                privacy = privacy,
+                csrf = BilibiliApi.biliJct
+            )
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "addFavFolder response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                val id = response.data?.folderId()
+                if (id == null || id == 0L) throw Exception("创建收藏夹失败")
+                id
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "addFavFolder failed", it) }
     }
 
     suspend fun getFavResources(mediaId: Long, page: Int = 1): Result<Pair<List<FavResourceItem>, Boolean>> {

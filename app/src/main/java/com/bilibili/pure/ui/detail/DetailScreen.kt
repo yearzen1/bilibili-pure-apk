@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.core.SnapSpec
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
+import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.UgcSeason
 import com.bilibili.pure.data.model.SeasonArchiveItem
 import androidx.compose.material3.*
@@ -248,7 +250,7 @@ fun DetailScreen(
             isFavorited = uiState.isFavorited,
             favoriteCount = uiState.favoriteCount,
             isTogglingFavorite = uiState.isTogglingFavorite,
-            onToggleFavorite = { uiState.videoInfo?.let { viewModel.toggleFavorite(it.aid) } },
+            onToggleFavorite = { uiState.videoInfo?.let { viewModel.onFavoriteClick(it.aid) } },
             isLoggedIn = uiState.isLoggedIn,
             isFollowed = uiState.isFollowed,
             isTogglingFollow = uiState.isTogglingFollow,
@@ -413,6 +415,39 @@ fun DetailScreen(
             }
         )
     }
+
+    val favError = uiState.favError
+    LaunchedEffect(favError) {
+        if (favError != null) {
+            Toast.makeText(context, favError, Toast.LENGTH_SHORT).show()
+            viewModel.clearFavError()
+        }
+    }
+
+    if (uiState.favPickerVisible && uiState.videoInfo != null) {
+        val aid = uiState.videoInfo!!.aid
+        FavFolderSelectionDialog(
+            folders = uiState.favFolders,
+            loading = uiState.favPickerLoading,
+            selectedFolderId = uiState.selectedFolderId,
+            busy = uiState.isTogglingFavorite,
+            onSelect = { viewModel.selectFavFolder(it) },
+            onConfirm = { viewModel.confirmFavorite(aid) },
+            onCreateFolder = { viewModel.openCreateFolder() },
+            onDismiss = { viewModel.dismissFavPicker() }
+        )
+    }
+
+    if (uiState.showCreateFolder && uiState.videoInfo != null) {
+        val aid = uiState.videoInfo!!.aid
+        CreateFolderDialog(
+            creating = uiState.creatingFolder,
+            onConfirm = { title, intro, privacy ->
+                viewModel.createFavFolder(aid, title, intro, privacy)
+            },
+            onDismiss = { viewModel.dismissCreateFolder() }
+        )
+    }
 }
 
 @Composable
@@ -439,6 +474,145 @@ private fun QualitySelectionDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun FavFolderSelectionDialog(
+    folders: List<FavFolder>,
+    loading: Boolean,
+    selectedFolderId: Long?,
+    busy: Boolean,
+    onSelect: (Long) -> Unit,
+    onConfirm: () -> Unit,
+    onCreateFolder: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("选择收藏夹") },
+        text = {
+            when {
+                loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("加载中…")
+                }
+                folders.isEmpty() -> Text("还没有收藏夹，点击下方新建")
+                else -> Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    folders.forEach { folder ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !busy) { onSelect(folder.id) }
+                        ) {
+                            RadioButton(
+                                selected = folder.id == selectedFolderId,
+                                onClick = { if (!busy) onSelect(folder.id) },
+                                enabled = !busy
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = folder.title,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${folder.mediaCount}个视频",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !busy && !loading && selectedFolderId != null
+            ) {
+                Text("收藏")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onCreateFolder, enabled = !busy && !loading) {
+                    Text("新建收藏夹")
+                }
+                TextButton(onClick = onDismiss, enabled = !busy) {
+                    Text("取消")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun CreateFolderDialog(
+    creating: Boolean,
+    onConfirm: (title: String, intro: String, privacy: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var intro by remember { mutableStateOf("") }
+    var isPrivate by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!creating) onDismiss() },
+        title = { Text("新建收藏夹") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题") },
+                    singleLine = true,
+                    enabled = !creating,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = intro,
+                    onValueChange = { intro = it },
+                    label = { Text("简介（可选）") },
+                    enabled = !creating,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("私密收藏夹", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = isPrivate,
+                        onCheckedChange = { isPrivate = it },
+                        enabled = !creating
+                    )
+                }
+                if (creating) {
+                    Text(
+                        text = "创建中…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(title, intro, if (isPrivate) 1 else 0) },
+                enabled = title.isNotBlank() && !creating
+            ) {
+                Text("创建")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !creating) {
                 Text("取消")
             }
         }

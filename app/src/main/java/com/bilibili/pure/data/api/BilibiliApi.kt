@@ -142,8 +142,18 @@ interface BilibiliApi {
     @GET("x/v3/fav/folder/created/list-all")
     suspend fun getFavFolders(
         @Query("up_mid") upMid: Long,
-        @Query("type") type: Int = 0
+        @Query("type") type: Int = 0,
+        @Query("rid") rid: Long? = null
     ): ApiResponse<FavFolderList>
+
+    @FormUrlEncoded
+    @POST("x/v3/fav/folder/add")
+    suspend fun addFavFolder(
+        @Field("title") title: String,
+        @Field("intro") intro: String = "",
+        @Field("privacy") privacy: Int = 0,
+        @Field("csrf") csrf: String
+    ): ApiResponse<FavFolderAddData>
 
     @GET("x/v3/fav/resource/list")
     suspend fun getFavResources(
