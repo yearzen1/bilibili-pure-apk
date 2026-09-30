@@ -52,6 +52,7 @@ import coil.request.ImageRequest
 import coil.size.Size
 import com.bilibili.pure.data.model.VideoInfo
 import com.bilibili.pure.data.model.VideoPage
+import com.bilibili.pure.ui.common.CreateFolderDialog
 import com.bilibili.pure.ui.common.DismissSelectionCard
 import com.bilibili.pure.ui.common.DismissSelectionClickable
 import com.bilibili.pure.util.fixPic
@@ -573,69 +574,6 @@ private fun FavFolderSelectionDialog(
                 TextButton(onClick = onDismiss, enabled = !busy) {
                     Text("取消")
                 }
-            }
-        }
-    )
-}
-
-@Composable
-private fun CreateFolderDialog(
-    creating: Boolean,
-    onConfirm: (title: String, intro: String, privacy: Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var intro by remember { mutableStateOf("") }
-    var isPrivate by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = { if (!creating) onDismiss() },
-        title = { Text("新建收藏夹") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("标题") },
-                    singleLine = true,
-                    enabled = !creating,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = intro,
-                    onValueChange = { intro = it },
-                    label = { Text("简介（可选）") },
-                    enabled = !creating,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("私密收藏夹", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = isPrivate,
-                        onCheckedChange = { isPrivate = it },
-                        enabled = !creating
-                    )
-                }
-                if (creating) {
-                    Text(
-                        text = "创建中…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(title, intro, if (isPrivate) 1 else 0) },
-                enabled = title.isNotBlank() && !creating
-            ) {
-                Text("创建")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !creating) {
-                Text("取消")
             }
         }
     )

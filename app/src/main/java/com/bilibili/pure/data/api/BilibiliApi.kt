@@ -157,6 +157,29 @@ interface BilibiliApi {
         @Field("csrf") csrf: String
     ): ApiResponse<FavFolderAddData>
 
+    @FormUrlEncoded
+    @POST("x/v3/fav/folder/edit")
+    suspend fun editFavFolder(
+        @Field("media_id") mediaId: Long,
+        @Field("title") title: String,
+        @Field("intro") intro: String = "",
+        @Field("privacy") privacy: Int = 0,
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
+    @FormUrlEncoded
+    @POST("x/v3/fav/folder/del")
+    suspend fun deleteFavFolders(
+        @Field("media_ids") mediaIds: String,
+        @Field("platform") platform: String = "web",
+        @Field("csrf") csrf: String
+    ): ApiResponse<Any>
+
+    @GET("x/v3/fav/folder/info")
+    suspend fun getFavFolderInfo(
+        @Query("media_id") mediaId: Long
+    ): ApiResponse<FavFolderInfo?>
+
     @GET("x/v3/fav/resource/list")
     suspend fun getFavResources(
         @Query("media_id") mediaId: Long,

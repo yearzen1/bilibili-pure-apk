@@ -1,7 +1,9 @@
 package com.bilibili.pure.ui.favorites
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -10,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,7 @@ import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.FavResourceItem
 import com.bilibili.pure.ui.common.AppBarSearchActions
 import com.bilibili.pure.ui.common.AppBarSearchTitle
+import com.bilibili.pure.ui.common.CreateFolderDialog
 import com.bilibili.pure.ui.common.DismissSelectionCard
 import com.bilibili.pure.ui.common.ScrollToTopFab
 import com.bilibili.pure.ui.common.VideoCard
@@ -45,6 +49,8 @@ fun FavoritesScreen(
     val folderListState = rememberLazyListState()
     val resourceListState = rememberLazyListState()
     val searchState = rememberAppBarSearchState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var longPressFolder by remember { mutableStateOf<FavFolder?>(null) }
 
     val inFolder = uiState.selectedFolderId != null
     val searchActive = searchState.isSearching || uiState.searchKeyword != null
@@ -55,6 +61,13 @@ fun FavoritesScreen(
 
     LaunchedEffect(uiState.searchKeyword, uiState.currentPage) {
         if (uiState.currentPage == 1) resourceListState.scrollToItem(0)
+    }
+
+    LaunchedEffect(uiState.opError) {
+        uiState.opError?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearOpError()
+        }
     }
 
     fun handleBack() {
@@ -97,10 +110,16 @@ fun FavoritesScreen(
                     }
                 },
                 actions = {
+                    if (!inFolder) {
+                        IconButton(onClick = { viewModel.openCreateFolder() }) {
+                            Icon(Icons.Default.Add, contentDescription = "新建收藏夹")
+                        }
+                    }
                     AppBarSearchActions(searchState)
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         when {
             inFolder -> {
@@ -134,10 +153,63 @@ fun FavoritesScreen(
                         searchState.exit()
                         viewModel.selectFolder(it)
                     },
+                    onFolderLongClick = { longPressFolder = it },
                     modifier = Modifier.padding(padding)
                 )
             }
         }
+    }
+
+    if (uiState.showCreateFolder) {
+        CreateFolderDialog(
+            creating = uiState.creatingFolder,
+            onConfirm = { title, intro, privacy ->
+                viewModel.createFavFolder(title, intro, privacy)
+            },
+            onDismiss = { viewModel.dismissCreateFolder() }
+        )
+    }
+
+    longPressFolder?.let { folder ->
+        FolderActionDialog(
+            folder = folder,
+            onEdit = {
+                longPressFolder = null
+                viewModel.startEditFolder(folder)
+            },
+            onDelete = {
+                longPressFolder = null
+                viewModel.openDeleteDialog(folder.id)
+            },
+            onDismiss = { longPressFolder = null }
+        )
+    }
+
+    if (uiState.showEditFolder) {
+        EditFolderDialog(
+            title = uiState.editTitle,
+            intro = uiState.editIntro,
+            privacy = uiState.editPrivacy,
+            saving = uiState.editingFolder,
+            detailLoading = uiState.editDetailLoading,
+            onTitleChange = { viewModel.updateEditTitle(it) },
+            onIntroChange = { viewModel.updateEditIntro(it) },
+            onPrivacyChange = { viewModel.updateEditPrivacy(it) },
+            onConfirm = { viewModel.confirmEditFolder() },
+            onDismiss = { viewModel.dismissEditFolder() }
+        )
+    }
+
+    if (uiState.showDeleteDialog) {
+        FolderDeleteDialog(
+            folders = uiState.folders,
+            selectedIds = uiState.deleteSelectedIds,
+            deleting = uiState.deletingFolders,
+            onToggle = { viewModel.toggleDeleteSelection(it) },
+            onSelectAll = { viewModel.toggleSelectAllFolders() },
+            onConfirm = { viewModel.confirmDeleteFolders() },
+            onDismiss = { viewModel.dismissDeleteDialog() }
+        )
     }
 }
 
@@ -150,6 +222,7 @@ private fun FolderListView(
     listState: LazyListState,
     emptyText: String = "暂无收藏夹",
     onFolderClick: (FavFolder) -> Unit,
+    onFolderLongClick: (FavFolder) -> Unit,
     modifier: Modifier = Modifier
 ) {
     when {
@@ -186,7 +259,8 @@ private fun FolderListView(
                         FolderCard(
                             folder = folder,
                             coverUrl = covers[folder.id] ?: folder.cover,
-                            onClick = { onFolderClick(folder) }
+                            onClick = { onFolderClick(folder) },
+                            onLongClick = { onFolderLongClick(folder) }
                         )
                     }
                 }
@@ -196,12 +270,18 @@ private fun FolderListView(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FolderCard(folder: FavFolder, coverUrl: String?, onClick: () -> Unit) {
+private fun FolderCard(
+    folder: FavFolder,
+    coverUrl: String?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -355,4 +435,200 @@ private fun ResourceCard(item: FavResourceItem, onClick: () -> Unit) {
             pubdate = item.pubtime
         )
     }
+}
+
+@Composable
+private fun FolderActionDialog(
+    folder: FavFolder,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(folder.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = onEdit,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("修改收藏夹", modifier = Modifier.fillMaxWidth())
+                }
+                TextButton(
+                    onClick = onDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("删除收藏夹", modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditFolderDialog(
+    title: String,
+    intro: String,
+    privacy: Int,
+    saving: Boolean,
+    detailLoading: Boolean,
+    onTitleChange: (String) -> Unit,
+    onIntroChange: (String) -> Unit,
+    onPrivacyChange: (Int) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("修改收藏夹") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    label = { Text("标题") },
+                    singleLine = true,
+                    enabled = !saving,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = intro,
+                    onValueChange = onIntroChange,
+                    label = { Text("简介（可选）") },
+                    enabled = !saving && !detailLoading,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("私密收藏夹", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = privacy == 1,
+                        onCheckedChange = { onPrivacyChange(if (it) 1 else 0) },
+                        enabled = !saving
+                    )
+                }
+                when {
+                    detailLoading -> Text(
+                        text = "加载中…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    saving -> Text(
+                        text = "保存中…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = title.isNotBlank() && !saving && !detailLoading
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun FolderDeleteDialog(
+    folders: List<FavFolder>,
+    selectedIds: Set<Long>,
+    deleting: Boolean,
+    onToggle: (Long) -> Unit,
+    onSelectAll: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val allSelected = folders.isNotEmpty() && selectedIds.containsAll(folders.map { it.id })
+
+    AlertDialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        title = { Text("删除收藏夹") },
+        text = {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "已选 ${selectedIds.size}/${folders.size}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onSelectAll, enabled = !deleting && folders.isNotEmpty()) {
+                        Text(if (allSelected) "清空" else "全选")
+                    }
+                }
+                Text(
+                    text = "删除后视频将从该收藏夹移除",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    items(folders, key = { it.id }) { folder ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !deleting) { onToggle(folder.id) }
+                        ) {
+                            Checkbox(
+                                checked = folder.id in selectedIds,
+                                onCheckedChange = { onToggle(folder.id) },
+                                enabled = !deleting
+                            )
+                            Text(
+                                text = folder.title,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${folder.mediaCount}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = selectedIds.isNotEmpty() && !deleting,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text(if (deleting) "删除中…" else "删除(${selectedIds.size})")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) {
+                Text("取消")
+            }
+        }
+    )
 }

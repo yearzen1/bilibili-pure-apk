@@ -238,6 +238,49 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "addFavFolder failed", it) }
     }
 
+    suspend fun editFavFolder(mediaId: Long, title: String, intro: String, privacy: Int): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "editFavFolder: id=$mediaId title=$title privacy=$privacy")
+        return runCatching {
+            if (BilibiliApi.biliJct.isEmpty()) throw Exception("未登录")
+            val response = api.editFavFolder(
+                mediaId = mediaId,
+                title = title,
+                intro = intro,
+                privacy = privacy,
+                csrf = BilibiliApi.biliJct
+            )
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "editFavFolder response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) throw Exception(response.message)
+        }.onFailure { Log.e(BilibiliApp.TAG, "editFavFolder failed", it) }
+    }
+
+    suspend fun deleteFavFolders(mediaIds: List<Long>): Result<Unit> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "deleteFavFolders: ids=$mediaIds")
+        return runCatching {
+            if (mediaIds.isEmpty()) throw Exception("请选择要删除的收藏夹")
+            if (BilibiliApi.biliJct.isEmpty()) throw Exception("未登录")
+            val response = api.deleteFavFolders(
+                mediaIds = mediaIds.joinToString(","),
+                csrf = BilibiliApi.biliJct
+            )
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "deleteFavFolders response: code=${response.code} msg=${response.message}")
+            if (response.code != 0) throw Exception(response.message)
+        }.onFailure { Log.e(BilibiliApp.TAG, "deleteFavFolders failed", it) }
+    }
+
+    suspend fun getFavFolderInfo(mediaId: Long): Result<FavFolderInfo> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolderInfo: id=$mediaId")
+        return runCatching {
+            val response = api.getFavFolderInfo(mediaId = mediaId)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolderInfo response: code=${response.code} msg=${response.message}")
+            if (response.code == 0) {
+                response.data ?: throw Exception("收藏夹信息为空")
+            } else {
+                throw Exception(response.message)
+            }
+        }.onFailure { Log.e(BilibiliApp.TAG, "getFavFolderInfo failed", it) }
+    }
+
     suspend fun getFavResources(mediaId: Long, page: Int = 1, keyword: String? = null): Result<Pair<List<FavResourceItem>, Boolean>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavResources: mediaId=$mediaId page=$page keyword=$keyword")
         return runCatching<Pair<List<FavResourceItem>, Boolean>> {

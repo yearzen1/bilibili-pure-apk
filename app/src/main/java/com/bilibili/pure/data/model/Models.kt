@@ -504,6 +504,14 @@ data class FavFolderAddData(
     fun folderId(): Long = if (id != 0L) id else mediaId
 }
 
+data class FavFolderInfo(
+    val id: Long = 0,
+    val title: String = "",
+    val intro: String? = null,
+    @SerializedName("media_count") val mediaCount: Int = 0,
+    val attr: Int = 0
+)
+
 data class FavResourceList(
     val medias: List<FavResourceItem>? = null,
     @SerializedName("has_more") val hasMore: Boolean = false
