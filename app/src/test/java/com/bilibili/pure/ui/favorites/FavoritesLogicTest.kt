@@ -75,6 +75,15 @@ class FavoritesLogicTest {
     }
 
     @Test
+    fun privacyLabelReflectsAttrBit() {
+        assertEquals("私密", privacyLabel(1))
+        assertEquals("私密", privacyLabel(23))
+        assertEquals("私密", privacyLabel(131))
+        assertEquals("公开", privacyLabel(0))
+        assertEquals("公开", privacyLabel(22))
+    }
+
+    @Test
     fun deleteMediaIdsJoinsWithComma() {
         assertEquals("1,2,3", deleteMediaIds(listOf(1L, 2L, 3L)))
         assertEquals("42", deleteMediaIds(listOf(42L)))

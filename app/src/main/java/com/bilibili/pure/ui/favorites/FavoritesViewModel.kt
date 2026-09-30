@@ -56,6 +56,9 @@ internal fun validateFolderTitle(title: String): String? =
 
 internal fun privacyFromAttr(attr: Int): Int = attr and 1
 
+internal fun privacyLabel(attr: Int): String =
+    if (privacyFromAttr(attr) == 1) "私密" else "公开"
+
 internal fun deleteMediaIds(ids: List<Long>): String = ids.joinToString(",")
 
 internal fun applyFolderEdit(
