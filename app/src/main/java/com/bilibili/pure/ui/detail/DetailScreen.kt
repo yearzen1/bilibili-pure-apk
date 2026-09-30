@@ -7,11 +7,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.core.SnapSpec
@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
@@ -431,6 +432,7 @@ fun DetailScreen(
             loading = uiState.favPickerLoading,
             selectedFolderId = uiState.selectedFolderId,
             busy = uiState.isTogglingFavorite,
+            covers = uiState.folderCovers,
             onSelect = { viewModel.selectFavFolder(it) },
             onConfirm = { viewModel.confirmFavorite(aid) },
             onCreateFolder = { viewModel.openCreateFolder() },
@@ -486,6 +488,7 @@ private fun FavFolderSelectionDialog(
     loading: Boolean,
     selectedFolderId: Long?,
     busy: Boolean,
+    covers: Map<Long, String>,
     onSelect: (Long) -> Unit,
     onConfirm: () -> Unit,
     onCreateFolder: () -> Unit,
@@ -505,8 +508,8 @@ private fun FavFolderSelectionDialog(
                     Text("加载中…")
                 }
                 folders.isEmpty() -> Text("还没有收藏夹，点击下方新建")
-                else -> Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    folders.forEach { folder ->
+                else -> LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(folders, key = { it.id }) { folder ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -518,6 +521,25 @@ private fun FavFolderSelectionDialog(
                                 onClick = { if (!busy) onSelect(folder.id) },
                                 enabled = !busy
                             )
+                            val cover = covers[folder.id]
+                            if (!cover.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = cover,
+                                    contentDescription = folder.title,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = folder.title,

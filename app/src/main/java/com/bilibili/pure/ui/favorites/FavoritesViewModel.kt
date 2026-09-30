@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
+import com.bilibili.pure.data.fav.extractFolderCovers
 import com.bilibili.pure.data.model.FavFolder
 import com.bilibili.pure.data.model.FavResourceItem
 import com.bilibili.pure.data.repository.BilibiliRepository
@@ -23,7 +24,8 @@ data class FavoritesUiState(
     val isLoadingMore: Boolean = false,
     val error: String? = null,
     val hasMore: Boolean = false,
-    val currentPage: Int = 1
+    val currentPage: Int = 1,
+    val folderCovers: Map<Long, String> = emptyMap()
 )
 
 class FavoritesViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,6 +44,7 @@ class FavoritesViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { folders ->
                     _uiState.value = _uiState.value.copy(
                         folders = folders,
+                        folderCovers = extractFolderCovers(folders),
                         isLoadingFolders = false
                     )
                 }

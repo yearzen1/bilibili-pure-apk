@@ -139,10 +139,12 @@ interface BilibiliApi {
         @Query("platform") platform: String = "android"
     ): ApiResponse<PlayUrlInfo>
 
-    @GET("x/v3/fav/folder/created/list-all")
+    @GET("x/v3/fav/folder/created/list")
     suspend fun getFavFolders(
         @Query("up_mid") upMid: Long,
-        @Query("type") type: Int = 0,
+        @Query("pn") page: Int = 1,
+        @Query("ps") pageSize: Int = 100,
+        @Query("type") type: Int? = null,
         @Query("rid") rid: Long? = null
     ): ApiResponse<FavFolderList>
 

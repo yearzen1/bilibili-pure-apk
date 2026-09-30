@@ -88,6 +88,7 @@ fun FavoritesScreen(
                     folders = uiState.folders,
                     isLoading = uiState.isLoadingFolders,
                     error = uiState.error,
+                    covers = uiState.folderCovers,
                     onFolderClick = { viewModel.selectFolder(it) },
                     modifier = Modifier.padding(padding)
                 )
@@ -101,6 +102,7 @@ private fun FolderListView(
     folders: List<FavFolder>,
     isLoading: Boolean,
     error: String?,
+    covers: Map<Long, String>,
     onFolderClick: (FavFolder) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -133,7 +135,11 @@ private fun FolderListView(
                     )
                 }
                 items(folders, key = { it.id }) { folder ->
-                    FolderCard(folder = folder, onClick = { onFolderClick(folder) })
+                    FolderCard(
+                        folder = folder,
+                        coverUrl = covers[folder.id] ?: folder.cover,
+                        onClick = { onFolderClick(folder) }
+                    )
                 }
             }
         }
@@ -141,7 +147,7 @@ private fun FolderListView(
 }
 
 @Composable
-private fun FolderCard(folder: FavFolder, onClick: () -> Unit) {
+private fun FolderCard(folder: FavFolder, coverUrl: String?, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -152,9 +158,9 @@ private fun FolderCard(folder: FavFolder, onClick: () -> Unit) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!folder.cover.isNullOrEmpty()) {
+            if (!coverUrl.isNullOrEmpty()) {
                 AsyncImage(
-                    model = fixPic(folder.cover),
+                    model = fixPic(coverUrl),
                     contentDescription = folder.title,
                     modifier = Modifier.size(56.dp),
                     contentScale = ContentScale.Crop

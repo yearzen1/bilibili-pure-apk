@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.fav.extractFolderCovers
 import com.bilibili.pure.data.model.CommentCursor
 import com.bilibili.pure.data.model.CommentItem
 import com.bilibili.pure.data.model.FavFolder
@@ -112,6 +113,7 @@ data class DetailUiState(
     val showCreateFolder: Boolean = false,
     val creatingFolder: Boolean = false,
     val favError: String? = null,
+    val folderCovers: Map<Long, String> = emptyMap(),
     val ugcSeason: UgcSeason? = null,
     // Collection pagination state
     val collectionEpisodes: List<SeasonArchiveItem> = emptyList(),
@@ -236,6 +238,7 @@ class DetailViewModel(
                     _uiState.value = _uiState.value.copy(
                         favPickerLoading = false,
                         favFolders = folders,
+                        folderCovers = extractFolderCovers(folders),
                         selectedFolderId = pickDefaultFolderId(folders),
                         isTogglingFavorite = false
                     )
@@ -365,14 +368,16 @@ class DetailViewModel(
             repository.addFavFolder(title = title.trim(), intro = intro, privacy = privacy)
                 .onSuccess { newId ->
                     val s = _uiState.value
+                    val newFolders = s.favFolders + FavFolder(
+                        id = newId,
+                        title = title.trim(),
+                        mediaCount = 0
+                    )
                     _uiState.value = s.copy(
                         creatingFolder = false,
                         showCreateFolder = false,
-                        favFolders = s.favFolders + FavFolder(
-                            id = newId,
-                            title = title.trim(),
-                            mediaCount = 0
-                        ),
+                        favFolders = newFolders,
+                        folderCovers = extractFolderCovers(newFolders),
                         selectedFolderId = newId
                     )
                     Log.d(BilibiliApp.TAG, "favFolder created: id=$newId title=$title")

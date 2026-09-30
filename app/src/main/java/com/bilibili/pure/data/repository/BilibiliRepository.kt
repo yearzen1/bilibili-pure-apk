@@ -195,17 +195,25 @@ class BilibiliRepository(
     suspend fun getFavFolders(upMid: Long, rid: Long? = null): Result<List<FavFolder>> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders: upMid=$upMid rid=$rid")
         return runCatching {
-            val response = api.getFavFolders(
-                upMid = upMid,
-                type = if (rid != null) 2 else 0,
-                rid = rid
-            )
-            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders response: code=${response.code} msg=${response.message}")
-            if (response.code == 0) {
-                response.data?.list ?: emptyList()
-            } else {
-                throw Exception(response.message)
+            val all = mutableListOf<FavFolder>()
+            var page = 1
+            while (true) {
+                val response = api.getFavFolders(
+                    upMid = upMid,
+                    page = page,
+                    pageSize = 100,
+                    type = if (rid != null) 2 else null,
+                    rid = rid
+                )
+                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getFavFolders page=$page code=${response.code}")
+                if (response.code != 0) throw Exception(response.message)
+                val items = response.data?.list ?: emptyList()
+                val total = response.data?.count ?: 0
+                all += items
+                page++
+                if (items.isEmpty() || all.size >= total || page > 50) break
             }
+            all
         }.onFailure { Log.e(BilibiliApp.TAG, "getFavFolders failed", it) }
     }
 
