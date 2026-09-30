@@ -291,7 +291,7 @@ private fun ResourceListView(
             Box(modifier = modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
-                    modifier = modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
