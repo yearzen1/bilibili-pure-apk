@@ -1,5 +1,10 @@
 package com.bilibili.pure.ui.settings
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.update.UpdateChecker
 import com.bilibili.pure.data.update.UpdateDownloader
@@ -129,6 +135,37 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
     var paused by remember { mutableStateOf(false) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
     val ticker = remember { SpeedTicker(0, 0, 0, 0) }
+
+    var feedbackDialogVisible by remember { mutableStateOf(false) }
+    var feedbackType by remember { mutableStateOf(FeedbackType.BUG) }
+    var feedbackContent by remember { mutableStateOf("") }
+    var feedbackContact by remember { mutableStateOf("") }
+
+    fun sendFeedback() {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(FeedbackEmail.mailtoUri())).apply {
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(FeedbackEmail.RECIPIENT))
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                FeedbackEmail.subject(feedbackType, BuildConfig.VERSION_NAME)
+            )
+            putExtra(
+                Intent.EXTRA_TEXT,
+                FeedbackEmail.body(
+                    content = feedbackContent,
+                    contact = feedbackContact,
+                    version = BuildConfig.VERSION_NAME,
+                    androidVersion = Build.VERSION.RELEASE,
+                    deviceModel = Build.MODEL
+                )
+            )
+        }
+        try {
+            context.startActivity(intent)
+            feedbackDialogVisible = false
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, "未找到邮件应用，无法发送反馈", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     fun startCheck() {
         updateState = UpdateUiState.Checking
@@ -327,8 +364,86 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                         )
                     }
                 )
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                SettingsRow(
+                    title = "用户反馈",
+                    subtitle = "Bug 反馈与功能建议",
+                    onClick = {
+                        feedbackType = FeedbackType.BUG
+                        feedbackContent = ""
+                        feedbackContact = ""
+                        feedbackDialogVisible = true
+                    },
+                    trailing = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
             }
         }
+    }
+
+    if (feedbackDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { feedbackDialogVisible = false },
+            title = { Text("用户反馈") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    FeedbackType.entries.forEach { type ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { feedbackType = type }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = feedbackType == type,
+                                onClick = { feedbackType = type }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(type.label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feedbackContent,
+                        onValueChange = { feedbackContent = it },
+                        label = { Text("反馈内容 *") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        minLines = 4,
+                        maxLines = 8
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feedbackContact,
+                        onValueChange = { feedbackContact = it },
+                        label = { Text("联系方式（选填）") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = FeedbackEmail.isValid(feedbackContent),
+                    onClick = { sendFeedback() }
+                ) { Text("发送") }
+            },
+            dismissButton = {
+                TextButton(onClick = { feedbackDialogVisible = false }) { Text("取消") }
+            }
+        )
     }
 
     if (themeDialogVisible) {
