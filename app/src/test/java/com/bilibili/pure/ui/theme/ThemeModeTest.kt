@@ -38,4 +38,10 @@ class ThemeModeTest {
         assertEquals("浅色（白天）", themeModeLabels[THEME_LIGHT])
         assertEquals("深色（黑夜）", themeModeLabels[THEME_DARK])
     }
+
+    @Test
+    fun rowTitleReflectsDarkState() {
+        assertEquals("深色模式", themeRowTitle(dark = true))
+        assertEquals("浅色模式", themeRowTitle(dark = false))
+    }
 }

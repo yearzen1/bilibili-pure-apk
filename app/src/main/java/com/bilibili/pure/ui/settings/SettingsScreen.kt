@@ -7,6 +7,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,6 +39,8 @@ import com.bilibili.pure.ui.theme.THEME_DARK
 import com.bilibili.pure.ui.theme.THEME_FOLLOW_SYSTEM
 import com.bilibili.pure.ui.theme.THEME_LIGHT
 import com.bilibili.pure.ui.theme.themeModeLabels
+import com.bilibili.pure.ui.theme.themeRowTitle
+import com.bilibili.pure.ui.theme.resolveDarkTheme
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -281,10 +285,11 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                     .clip(SectionShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
-                SettingsRow(
-                    title = "深色模式",
-                    subtitle = "当前：${themeModeLabels[themeMode]}",
-                    leadingIcon = Icons.Outlined.DarkMode,
+            val dark = resolveDarkTheme(themeMode, isSystemInDarkTheme())
+            SettingsRow(
+                title = themeRowTitle(dark),
+                subtitle = "当前：${themeModeLabels[themeMode]}",
+                leadingIcon = if (dark) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
                     onClick = {
                         themeSelected = themeMode
                         themeDialogVisible = true

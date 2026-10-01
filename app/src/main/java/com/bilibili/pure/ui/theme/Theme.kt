@@ -26,6 +26,8 @@ fun resolveDarkTheme(themeMode: Int, systemDark: Boolean): Boolean = when (theme
     else -> systemDark
 }
 
+fun themeRowTitle(dark: Boolean): String = if (dark) "深色模式" else "浅色模式"
+
 @Composable
 fun BilibiliPureTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
