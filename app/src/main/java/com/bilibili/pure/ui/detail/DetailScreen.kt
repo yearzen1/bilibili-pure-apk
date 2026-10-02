@@ -126,6 +126,7 @@ fun DetailScreen(
     var isLoadingQualities by remember { mutableStateOf(false) }
     var confirmMobilePlay by remember { mutableStateOf(false) }
     var confirmMobileDownload by remember { mutableStateOf(false) }
+    var showUnfollowConfirm by remember { mutableStateOf(false) }
     var showMultiPDialog by remember { mutableStateOf(false) }
     var multiPQualities by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
     var multiPSelectedQuality by remember { mutableStateOf<QualityOption?>(null) }
@@ -256,7 +257,13 @@ fun DetailScreen(
             isLoggedIn = uiState.isLoggedIn,
             isFollowed = uiState.isFollowed,
             isTogglingFollow = uiState.isTogglingFollow,
-            onFollowUploader = { mid -> viewModel.toggleFollowUploader(mid) },
+            followStatusLoading = uiState.followStatusLoading,
+            onFollowUploader = { mid ->
+                when (followActionForClick(uiState.isFollowed)) {
+                    FollowAction.Follow -> viewModel.toggleFollowUploader(mid)
+                    FollowAction.ConfirmUnfollow -> showUnfollowConfirm = true
+                }
+            },
             onDownload = {
                 if (AppSettings.wifiOnlyDownload && !AppSettings.isWifiConnected(context)) {
                     confirmMobileDownload = true
@@ -412,6 +419,28 @@ fun DetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmMobileDownload = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showUnfollowConfirm) {
+        val ownerName = uiState.videoInfo?.owner?.name ?: ""
+        AlertDialog(
+            onDismissRequest = { showUnfollowConfirm = false },
+            title = { Text("取消关注") },
+            text = { Text("确定取消关注「$ownerName」？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnfollowConfirm = false
+                    uiState.videoInfo?.owner?.mid?.let { viewModel.toggleFollowUploader(it) }
+                }) {
+                    Text("确定", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnfollowConfirm = false }) {
                     Text("取消")
                 }
             }
@@ -729,6 +758,7 @@ private fun DetailContent(
     isLoggedIn: Boolean = false,
     isFollowed: Boolean = false,
     isTogglingFollow: Boolean = false,
+    followStatusLoading: Boolean = false,
     onFollowUploader: (mid: Long) -> Unit = {},
     onDownload: () -> Unit = {},
     ugcSeason: UgcSeason? = null,
@@ -827,13 +857,20 @@ private fun DetailContent(
                         if (isLoggedIn) {
                             TextButton(
                                 onClick = { onFollowUploader(videoInfo.owner.mid) },
-                                enabled = !isTogglingFollow,
+                                enabled = !isTogglingFollow && !followStatusLoading,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = if (isFollowed) "已关注" else "关注",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
+                                if (followStatusLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = followButtonLabel(isFollowed),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
                             }
                         }
                         Button(onClick = onPlay) {

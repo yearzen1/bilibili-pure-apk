@@ -35,6 +35,9 @@ import com.bilibili.pure.data.model.SeasonSummary
 import com.bilibili.pure.data.model.SpaceAccInfo
 import com.bilibili.pure.data.model.UserVideoItem
 import com.bilibili.pure.ui.common.ScrollToTopFab
+import com.bilibili.pure.ui.detail.FollowAction
+import com.bilibili.pure.ui.detail.followActionForClick
+import com.bilibili.pure.ui.detail.followButtonLabel
 import com.bilibili.pure.ui.common.VideoCard
 import com.bilibili.pure.ui.common.VideoCardSpec
 import com.bilibili.pure.util.fixPic
@@ -54,6 +57,7 @@ fun ChannelScreen(
     val uiState by viewModel.uiState.collectAsState()
     var isSearching by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showUnfollowConfirm by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -163,12 +167,39 @@ fun ChannelScreen(
                 onSeasonClick = { seasonId, firstBvid -> viewModel.openSeason(seasonId, firstBvid) },
                 onSwitchMode = { mode -> viewModel.switchMode(mode) },
                 onLoadMore = { viewModel.loadMore() },
-                onToggleFollow = { viewModel.toggleFollow() },
+                onToggleFollow = {
+                    when (followActionForClick(uiState.isFollowed)) {
+                        FollowAction.Follow -> viewModel.toggleFollow()
+                        FollowAction.ConfirmUnfollow -> showUnfollowConfirm = true
+                    }
+                },
                 listState = listState,
                 modifier = Modifier.fillMaxSize()
             )
             ScrollToTopFab(listState = listState)
         }
+    }
+
+    if (showUnfollowConfirm) {
+        val upName = uiState.spaceAccInfo?.name ?: ""
+        AlertDialog(
+            onDismissRequest = { showUnfollowConfirm = false },
+            title = { Text("取消关注") },
+            text = { Text("确定取消关注「$upName」？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnfollowConfirm = false
+                    viewModel.toggleFollow()
+                }) {
+                    Text("确定", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnfollowConfirm = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
@@ -217,6 +248,7 @@ internal fun ChannelBody(
                     isLoggedIn = uiState.isLoggedIn,
                     isFollowed = uiState.isFollowed,
                     isTogglingFollow = uiState.isTogglingFollow,
+                    followStatusLoading = uiState.followStatusLoading,
                     onToggleFollow = onToggleFollow
                 )
             }
@@ -380,6 +412,7 @@ internal fun UpInfoCard(
     isLoggedIn: Boolean = false,
     isFollowed: Boolean = false,
     isTogglingFollow: Boolean = false,
+    followStatusLoading: Boolean = false,
     onToggleFollow: () -> Unit = {}
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -439,13 +472,20 @@ internal fun UpInfoCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(
                     onClick = onToggleFollow,
-                    enabled = !isTogglingFollow,
+                    enabled = !isTogglingFollow && !followStatusLoading,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Text(
-                        text = if (isFollowed) "已关注" else "关注",
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                    if (followStatusLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = followButtonLabel(isFollowed),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 }
             }
         }

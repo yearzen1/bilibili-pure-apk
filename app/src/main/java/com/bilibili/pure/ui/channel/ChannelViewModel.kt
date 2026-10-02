@@ -35,6 +35,7 @@ data class ChannelUiState(
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
+    val followStatusLoading: Boolean = false,
     val viewMode: ChannelViewMode = ChannelViewMode.VIDEOS,
     val seasons: List<SeasonSummary> = emptyList(),
     val seasonVideos: List<SeasonArchiveItem> = emptyList(),
@@ -60,7 +61,12 @@ class ChannelViewModel(
         val isLoggedIn = BilibiliApi.loginCookies.isNotEmpty()
         Log.d(BilibiliApp.TAG, "ChannelVM: load mid=$mid isLoggedIn=$isLoggedIn")
         viewModelScope.launch {
-            _uiState.value = ChannelUiState(mid = mid, isLoading = true, isLoggedIn = isLoggedIn)
+            _uiState.value = ChannelUiState(
+                mid = mid,
+                isLoading = true,
+                isLoggedIn = isLoggedIn,
+                followStatusLoading = isLoggedIn
+            )
             repository.getUserVideos(mid)
                 .onSuccess { (videos, page) ->
                     Log.d(BilibiliApp.TAG, "ChannelVM: loaded ${videos.size} videos")
@@ -100,7 +106,8 @@ class ChannelViewModel(
                 _uiState.value = _uiState.value.copy(
                     spaceAccInfo = info ?: _uiState.value.spaceAccInfo,
                     userCard = card,
-                    isFollowed = card.following
+                    isFollowed = card.following,
+                    followStatusLoading = false
                 )
             }
             .onFailure {
@@ -110,10 +117,14 @@ class ChannelViewModel(
             repository.checkRelation(mid)
         }
             .onSuccess { followed ->
-                _uiState.value = _uiState.value.copy(isFollowed = followed)
+                _uiState.value = _uiState.value.copy(
+                    isFollowed = followed,
+                    followStatusLoading = false
+                )
             }
             .onFailure { e ->
                 Log.e(BilibiliApp.TAG, "ChannelVM: checkRelation also failed", e)
+                _uiState.value = _uiState.value.copy(followStatusLoading = false)
             }
     }
 

@@ -106,6 +106,7 @@ data class DetailUiState(
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
+    val followStatusLoading: Boolean = false,
     val favPickerVisible: Boolean = false,
     val favPickerLoading: Boolean = false,
     val favFolders: List<FavFolder> = emptyList(),
@@ -140,7 +141,11 @@ class DetailViewModel(
     fun load(bvid: String) {
         Log.d(BilibiliApp.TAG, "load detail: bvid=$bvid")
         val isLoggedIn = BilibiliApi.loginCookies.isNotEmpty()
-        _uiState.value = DetailUiState(isLoading = true, isLoggedIn = isLoggedIn)
+        _uiState.value = DetailUiState(
+            isLoading = true,
+            isLoggedIn = isLoggedIn,
+            followStatusLoading = isLoggedIn
+        )
         val commentsGeneration = startCommentRequest()
 
         viewModelScope.launch {
@@ -153,11 +158,11 @@ class DetailViewModel(
                         favoriteCount = info.stat.favorite,
                         ugcSeason = info.ugcSeason
                     )
+                    if (isLoggedIn) {
+                        viewModelScope.launch { checkFollowStatus(info.owner.mid) }
+                    }
                     loadComments(info.aid, _uiState.value.commentSortMode, commentsGeneration)
                     checkFavoured(info.aid)
-                    if (isLoggedIn) {
-                        checkFollowStatus(info.owner.mid)
-                    }
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "load detail failed: ${e.message}")
@@ -183,10 +188,14 @@ class DetailViewModel(
             repository.checkRelation(mid)
         }
             .onSuccess { followed ->
-                _uiState.value = _uiState.value.copy(isFollowed = followed)
+                _uiState.value = _uiState.value.copy(
+                    isFollowed = followed,
+                    followStatusLoading = false
+                )
             }
             .onFailure { e ->
                 Log.e(BilibiliApp.TAG, "checkRelation failed", e)
+                _uiState.value = _uiState.value.copy(followStatusLoading = false)
             }
     }
 
