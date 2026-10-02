@@ -45,6 +45,7 @@ import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.File
 
 private sealed interface UpdateUiState {
     object Idle : UpdateUiState
@@ -58,6 +59,7 @@ private sealed interface UpdateUiState {
         val isPaused: Boolean
     ) : UpdateUiState
     object InstallPermissionNeeded : UpdateUiState
+    data class LocalReady(val file: File, val info: UpdateInfo) : UpdateUiState
     data class Error(val message: String) : UpdateUiState
 }
 
@@ -186,7 +188,20 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
         }
     }
 
+    fun installOrAskPermission(file: File) {
+        updateState = UpdateUiState.Idle
+        if (downloader.hasInstallPermission()) {
+            downloader.install(file)
+        } else {
+            updateState = UpdateUiState.InstallPermissionNeeded
+        }
+    }
+
     fun startDownload(info: UpdateInfo) {
+        downloader.findExisting(info.tagName, info.apkSize)?.let { local ->
+            updateState = UpdateUiState.LocalReady(local, info)
+            return
+        }
         paused = false
         updateState = UpdateUiState.Downloading(
             downloaded = 0,
@@ -201,6 +216,7 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
         downloadJob = scope.launch {
             downloader.download(
                 url = info.apkUrl,
+                tag = info.tagName,
                 isPaused = { paused },
                 progress = { d, t ->
                     val now = System.nanoTime()
@@ -222,12 +238,7 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                     }
                 }
             ).onSuccess { file ->
-                updateState = UpdateUiState.Idle
-                if (downloader.hasInstallPermission()) {
-                    downloader.install(file)
-                } else {
-                    updateState = UpdateUiState.InstallPermissionNeeded
-                }
+                installOrAskPermission(file)
             }.onFailure { e ->
                 if (e is CancellationException) {
                     updateState = UpdateUiState.Idle
@@ -644,6 +655,30 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                 }
             )
         }
+
+        is UpdateUiState.LocalReady -> AlertDialog(
+            onDismissRequest = { updateState = UpdateUiState.Idle },
+            title = { Text("安装包已下载") },
+            text = {
+                Text(
+                    "${s.info.tagName}（${formatMb(s.file.length())}）已存在于本地，无需重新下载。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { installOrAskPermission(s.file) }) { Text("直接安装") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { updateState = UpdateUiState.Idle }) {
+                        Text("取消")
+                    }
+                    TextButton(onClick = {
+                        s.file.delete()
+                        startDownload(s.info)
+                    }) { Text("重新下载") }
+                }
+            }
+        )
 
         UpdateUiState.InstallPermissionNeeded -> AlertDialog(
             onDismissRequest = { updateState = UpdateUiState.Idle },

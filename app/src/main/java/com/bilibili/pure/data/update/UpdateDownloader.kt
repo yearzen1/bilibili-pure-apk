@@ -2,6 +2,7 @@ package com.bilibili.pure.data.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -22,7 +23,34 @@ class UpdateDownloader(private val context: Context) {
 
     companion object {
         private const val TAG = "BiliPure"
-        private const val FILE_NAME = "bilibili-pure-update.apk"
+        private const val FILE_PREFIX = "bilibili-pure-"
+
+        /** Builds the versioned APK file name for a release tag, sanitizing unsafe characters. */
+        fun apkFileName(tag: String): String {
+            val safe = tag.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            return "$FILE_PREFIX$safe.apk"
+        }
+
+        /** A local APK is reusable only when it exists, is non-empty and matches the release size. */
+        fun isValidApk(file: File, expectedSize: Long): Boolean {
+            if (expectedSize <= 0) return false
+            return file.exists() && file.isFile && file.length() == expectedSize && file.length() > 0
+        }
+
+        /**
+         * Identity check for a locally parsed APK archive: it must belong to [expectedPackage]
+         * and its internal versionName must equal the release [tag] (with or without `v` prefix).
+         * Null metadata (corrupt/unparseable archive) never matches.
+         */
+        fun matchesRelease(
+            pkg: String?,
+            versionName: String?,
+            expectedPackage: String,
+            tag: String
+        ): Boolean {
+            if (pkg == null || versionName == null) return false
+            return pkg == expectedPackage && versionName == tag.removePrefix("v")
+        }
     }
 
     private val client = OkHttpClient.Builder()
@@ -37,13 +65,18 @@ class UpdateDownloader(private val context: Context) {
      */
     suspend fun download(
         url: String,
+        tag: String,
         progress: (downloaded: Long, total: Long) -> Unit,
         isPaused: () -> Boolean
     ): Result<File> =
         withContext(Dispatchers.IO) {
             try {
-                val dir = File(context.getExternalFilesDir(null), "updates").apply { mkdirs() }
-                val target = File(dir, FILE_NAME)
+                val dir = updatesDir()
+                dir.mkdirs()
+                dir.listFiles()?.forEach { f ->
+                    if (f.name.endsWith(".apk") && f.name != apkFileName(tag)) f.delete()
+                }
+                val target = File(dir, apkFileName(tag))
                 if (target.exists()) target.delete()
 
                 val request = Request.Builder().url(url).build()
@@ -82,14 +115,40 @@ class UpdateDownloader(private val context: Context) {
                     Result.success(target)
                 }
             } catch (e: CancellationException) {
-                if (targetSafe(context).exists()) targetSafe(context).delete()
+                deleteTarget(tag)
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "UpdateDownloader failed: ${e.message}", e)
-                if (targetSafe(context).exists()) targetSafe(context).delete()
+                deleteTarget(tag)
                 Result.failure(e)
             }
         }
+
+    /**
+     * Returns a previously downloaded APK for [tag] only when it passes three checks:
+     * file size matches the GitHub release asset, the archive parses, and its packageName +
+     * versionName identify exactly this app and release. A file failing any check is deleted
+     * so the caller falls back to a fresh download.
+     */
+    fun findExisting(tag: String, expectedSize: Long): File? {
+        val file = targetFile(tag)
+        if (!isValidApk(file, expectedSize)) return null
+        val info = readArchive(file)
+        val ok = info != null && matchesRelease(
+            info.packageName, info.versionName, context.packageName, tag
+        )
+        return if (ok) file else {
+            file.delete()
+            null
+        }
+    }
+
+    private fun readArchive(file: File): PackageInfo? = try {
+        context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+    } catch (e: Exception) {
+        Log.e(TAG, "readArchive failed: ${e.message}", e)
+        null
+    }
 
     fun install(apkFile: File): Boolean {
         return try {
@@ -134,8 +193,12 @@ class UpdateDownloader(private val context: Context) {
         }
     }
 
-    private fun targetSafe(context: Context): File {
-        val dir = File(context.getExternalFilesDir(null), "updates")
-        return File(dir, FILE_NAME)
+    private fun updatesDir(): File = File(context.getExternalFilesDir(null), "updates")
+
+    private fun targetFile(tag: String): File = File(updatesDir(), apkFileName(tag))
+
+    private fun deleteTarget(tag: String) {
+        val f = targetFile(tag)
+        if (f.exists()) f.delete()
     }
 }
