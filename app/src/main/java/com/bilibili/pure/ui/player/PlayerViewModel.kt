@@ -6,16 +6,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.local.PendingReportLogic
+import com.bilibili.pure.data.local.PendingReportManager
 import com.bilibili.pure.data.local.PlaybackProgressManager
+import com.bilibili.pure.data.local.QueueAction
 import com.bilibili.pure.data.local.SubtitlePreference
 import com.bilibili.pure.data.local.SubtitlePreferenceManager
 import com.bilibili.pure.data.model.*
 import com.bilibili.pure.data.download.DownloadManager
 import com.bilibili.pure.data.repository.BilibiliRepository
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class PlaybackSource { ONLINE, LOCAL }
 
@@ -50,6 +55,9 @@ class PlayerViewModel(
     ),
     private val subtitlePreferenceManager: SubtitlePreferenceManager = SubtitlePreferenceManager(
         BilibiliApp.instance.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
+    ),
+    private val pendingReportManager: PendingReportManager = PendingReportManager(
+        BilibiliApp.instance.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
     )
 ) : ViewModel() {
 
@@ -57,6 +65,10 @@ class PlayerViewModel(
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private var cachedDashData: DashData? = null
+
+    init {
+        viewModelScope.launch { repository.flushPendingReports(pendingReportManager) }
+    }
 
     fun load(bvid: String, cid: Long? = null, source: PlaybackSource = PlaybackSource.ONLINE) {
         Log.d(BilibiliApp.TAG, "PlayerVM: load bvid=$bvid cid=$cid source=$source")
@@ -297,9 +309,18 @@ class PlayerViewModel(
     }
 
     fun reportProgress(aid: Long, cid: Long, progress: Long, duration: Long = 0L) {
-        if (BilibiliApi.loginCookies.isNotBlank()) {
+        val loggedIn = BilibiliApi.loginCookies.isNotBlank()
+        if (loggedIn) {
             viewModelScope.launch {
-                repository.reportProgress(aid, cid, progress)
+                // NonCancellable: exit-time reports must survive viewModelScope cancellation.
+                val result = withContext(NonCancellable) {
+                    repository.reportProgress(aid, cid, progress)
+                }
+                when (PendingReportLogic.queueAction(loggedIn = true, reportSuccess = result.isSuccess)) {
+                    QueueAction.REMOVE -> pendingReportManager.remove(aid, cid)
+                    QueueAction.ADD -> pendingReportManager.add(aid, cid, progress)
+                    QueueAction.NONE -> {}
+                }
             }
         }
         if (duration > 0) {

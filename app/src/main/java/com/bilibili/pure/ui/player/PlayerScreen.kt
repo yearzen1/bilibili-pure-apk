@@ -56,7 +56,6 @@ import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.R
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.local.AppSettings
-import com.bilibili.pure.data.local.PlaybackProgressManager
 import com.bilibili.pure.data.local.WifiMonitor
 import com.bilibili.pure.data.model.QualityOption
 import kotlinx.coroutines.delay
@@ -89,12 +88,6 @@ fun PlayerScreen(
     }
     val dataSourceFactory = remember {
         DefaultDataSource.Factory(context, networkFactory)
-    }
-
-    val playbackProgressManager = remember {
-        PlaybackProgressManager(
-            BilibiliApp.instance.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
-        )
     }
 
     val buildMediaSource: (PlayerUiState) -> MediaSource = { st ->
@@ -136,18 +129,22 @@ fun PlayerScreen(
 
                     if (state == Player.STATE_ENDED) {
                         val st = vm.uiState.value
-                        if (!st.isLoading && st.pages.size > 1) {
+                        if (!st.isLoading) {
                             val currentIdx = st.pages.indexOfFirst { it.cid == st.currentPage?.cid }
-                            if (currentIdx in 0 until st.pages.size - 1) {
-                                val nextPage = st.pages[currentIdx + 1]
-                                val aid = st.videoInfo?.aid ?: st.localAid
-                                val cid = st.currentPage?.cid
-                                if (aid != null && cid != null && aid != 0L && this@apply.currentPosition > 0) {
-                                    val progressSec = (this@apply.currentPosition / 1000).coerceAtLeast(1)
-                                    val durationSec = (this@apply.duration / 1000).coerceAtLeast(0)
-                                    Log.d(BilibiliApp.TAG, "ENDED SAVE: aid=$aid cid=$cid pos=$progressSec dur=$durationSec nextPage=${nextPage.page} isLocal=${st.videoInfo==null}")
-                                    playbackProgressManager.save(aid, cid, progressSec, durationSec)
-                                }
+                            val nextPage = if (currentIdx in 0 until st.pages.size - 1) {
+                                st.pages[currentIdx + 1]
+                            } else {
+                                null
+                            }
+                            val aid = st.videoInfo?.aid ?: st.localAid
+                            val cid = st.currentPage?.cid
+                            if (aid != 0L && cid != null && this@apply.currentPosition > 0) {
+                                val progressSec = (this@apply.currentPosition / 1000).coerceAtLeast(1)
+                                val durationSec = (this@apply.duration / 1000).coerceAtLeast(0)
+                                Log.d(BilibiliApp.TAG, "ENDED REPORT: aid=$aid cid=$cid pos=$progressSec dur=$durationSec nextPage=${nextPage?.page} isLocal=${st.videoInfo==null}")
+                                vm.reportProgress(aid, cid, progressSec, durationSec)
+                            }
+                            if (nextPage != null) {
                                 vm.selectPage(nextPage)
                             }
                         }
@@ -201,11 +198,11 @@ fun PlayerScreen(
         onDispose {
             val aid = uiState.videoInfo?.aid ?: uiState.localAid
             val cid = uiState.currentPage?.cid
-            if (aid != null && cid != null && aid != 0L && player.currentPosition > 0) {
+            if (aid != 0L && cid != null && player.currentPosition > 0) {
                 val progressSec = (player.currentPosition / 1000).coerceAtLeast(1)
                 val durationSec = (player.duration / 1000).coerceAtLeast(0)
-                Log.d(BilibiliApp.TAG, "onDispose SAVE progress: aid=$aid cid=$cid pos=$progressSec dur=$durationSec isLocal=${uiState.videoInfo==null}")
-                playbackProgressManager.save(aid, cid, progressSec, durationSec)
+                Log.d(BilibiliApp.TAG, "onDispose REPORT: aid=$aid cid=$cid pos=$progressSec dur=$durationSec isLocal=${uiState.videoInfo==null}")
+                vm.reportProgress(aid, cid, progressSec, durationSec)
             }
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "PlayerScreen: releasing player")
             player.run {
@@ -270,15 +267,15 @@ fun PlayerScreen(
             while (true) {
                 val progressSec = (player.currentPosition / 1000).coerceAtLeast(1)
                 val durationSec = (player.duration / 1000).coerceAtLeast(0)
-                Log.d(BilibiliApp.TAG, "periodic SAVE: aid=$aid cid=$cid pos=$progressSec dur=$durationSec playing=$playing isLocal=${uiState.videoInfo==null}")
-                playbackProgressManager.save(aid, cid, progressSec, durationSec)
+                Log.d(BilibiliApp.TAG, "periodic REPORT: aid=$aid cid=$cid pos=$progressSec dur=$durationSec playing=$playing isLocal=${uiState.videoInfo==null}")
+                vm.reportProgress(aid, cid, progressSec, durationSec)
                 delay(30_000)
             }
         } else if (player.currentPosition > 0) {
             val progressSec = (player.currentPosition / 1000).coerceAtLeast(1)
             val durationSec = (player.duration / 1000).coerceAtLeast(0)
-            Log.d(BilibiliApp.TAG, "pause SAVE: aid=$aid cid=$cid pos=$progressSec dur=$durationSec isLocal=${uiState.videoInfo==null}")
-            playbackProgressManager.save(aid, cid, progressSec, durationSec)
+            Log.d(BilibiliApp.TAG, "pause REPORT: aid=$aid cid=$cid pos=$progressSec dur=$durationSec isLocal=${uiState.videoInfo==null}")
+            vm.reportProgress(aid, cid, progressSec, durationSec)
         }
     }
 

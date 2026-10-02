@@ -5,6 +5,8 @@ import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.api.BilibiliApi
 import com.bilibili.pure.data.api.PassportApi
+import com.bilibili.pure.data.local.PendingReportLogic
+import com.bilibili.pure.data.local.PendingReportManager
 import com.bilibili.pure.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -105,13 +107,33 @@ class BilibiliRepository(
 
     suspend fun reportProgress(aid: Long, cid: Long, progress: Long): Result<Unit> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress: aid=$aid cid=$cid progress=${progress}s")
-        return runCatching {
+        return runCatching<Unit> {
             val response = api.reportProgress(aid = aid, cid = cid, progress = progress, csrf = BilibiliApi.biliJct)
             if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "reportProgress response: code=${response.code} msg=${response.message}")
             if (response.code != 0) {
                 Log.w(BilibiliApp.TAG, "reportProgress failed: code=${response.code} msg=${response.message}")
+                throw IllegalStateException("history/report code=${response.code} msg=${response.message}")
             }
-        }.onFailure { Log.e(BilibiliApp.TAG, "reportProgress exception", it) }
+            Log.d(BilibiliApp.TAG, "reportProgress ok: aid=$aid cid=$cid progress=${progress}s")
+        }.onFailure { Log.e(BilibiliApp.TAG, "reportProgress exception: aid=$aid cid=$cid", it) }
+    }
+
+    /**
+     * Re-sends progress reports that previously failed (offline playback).
+     * Newest first; stops at the first failure so a dead network does not
+     * burn rate limit on the remaining entries. Returns how many were sent.
+     */
+    suspend fun flushPendingReports(pending: PendingReportManager): Int {
+        if (BilibiliApi.loginCookies.isBlank()) return 0
+        val entries = pending.all()
+        if (entries.isEmpty()) return 0
+        val sent = PendingReportLogic.flush(entries) { entry ->
+            reportProgress(entry.aid, entry.cid, entry.progress).also { result ->
+                if (result.isSuccess) pending.remove(entry.aid, entry.cid)
+            }
+        }
+        Log.d(BilibiliApp.TAG, "flushPendingReports: sent=$sent/${entries.size}")
+        return sent
     }
 
     suspend fun getUserVideos(mid: Long, page: Int = 1): Result<Pair<List<UserVideoItem>, UserSpacePage?>> {

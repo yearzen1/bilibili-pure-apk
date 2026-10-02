@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
@@ -27,7 +28,10 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.local.PendingReportManager
+import com.bilibili.pure.data.repository.BilibiliRepository
 import com.bilibili.pure.data.update.UpdateDownloader
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
@@ -62,6 +66,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
         handleOpenDownloadsIntent(intent)
+        lifecycleScope.launch {
+            val pending = PendingReportManager(getSharedPreferences("bili_prefs", MODE_PRIVATE))
+            BilibiliRepository().flushPendingReports(pending)
+        }
         setContent {
             BilibiliPureTheme(
                 darkTheme = resolveDarkTheme(AppSettings.themeMode, isSystemInDarkTheme())

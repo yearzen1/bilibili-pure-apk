@@ -5,6 +5,7 @@ import android.webkit.CookieManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bilibili.pure.data.api.BilibiliApi
+import com.bilibili.pure.data.local.PendingReportManager
 import com.bilibili.pure.data.model.NavInfo
 import com.bilibili.pure.data.repository.BilibiliRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             .remove("bili_jct")
             .remove("dede_userid")
             .apply()
+        PendingReportManager(prefs).clear()
         BilibiliApi.loginCookies = ""
         BilibiliApi.biliJct = ""
         _navInfo.value = null
