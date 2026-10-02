@@ -28,51 +28,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.bilibili.pure.BuildConfig
 import com.bilibili.pure.data.local.AppSettings
 import com.bilibili.pure.data.update.UpdateChecker
 import com.bilibili.pure.data.update.UpdateDownloader
-import com.bilibili.pure.data.update.UpdateInfo
 import com.bilibili.pure.ui.theme.THEME_DARK
 import com.bilibili.pure.ui.theme.THEME_FOLLOW_SYSTEM
 import com.bilibili.pure.ui.theme.THEME_LIGHT
 import com.bilibili.pure.ui.theme.themeModeLabels
 import com.bilibili.pure.ui.theme.themeRowTitle
 import com.bilibili.pure.ui.theme.resolveDarkTheme
-import dev.jeziellago.compose.markdowntext.MarkdownText
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import java.io.File
-
-private sealed interface UpdateUiState {
-    object Idle : UpdateUiState
-    object Checking : UpdateUiState
-    object Latest : UpdateUiState
-    data class Available(val info: UpdateInfo) : UpdateUiState
-    data class Downloading(
-        val downloaded: Long,
-        val total: Long,
-        val speedBytesPerSec: Long,
-        val isPaused: Boolean
-    ) : UpdateUiState
-    object InstallPermissionNeeded : UpdateUiState
-    data class LocalReady(val file: File, val info: UpdateInfo) : UpdateUiState
-    data class Error(val message: String) : UpdateUiState
-}
-
-private class SpeedTicker(
-    var lastBytes: Long,
-    var lastNanos: Long,
-    var lastEmitNanos: Long,
-    var speedBytesPerSec: Long
-)
+import com.bilibili.pure.ui.update.UpdateDialogs
+import com.bilibili.pure.ui.update.UpdateFlowState
 
 private val SectionShape = RoundedCornerShape(16.dp)
-
-private fun formatMb(bytes: Long): String = String.format("%.1f MB", bytes / 1024f / 1024f)
 
 @Composable
 private fun SectionTitle(text: String) {
@@ -135,12 +104,12 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val checker = remember { UpdateChecker() }
-    val downloader = remember { UpdateDownloader(context.applicationContext) }
-    var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
-    var paused by remember { mutableStateOf(false) }
-    var downloadJob by remember { mutableStateOf<Job?>(null) }
-    val ticker = remember { SpeedTicker(0, 0, 0, 0) }
+    val updateFlow = remember {
+        UpdateFlowState(
+            scope = scope,
+            downloader = UpdateDownloader(context.applicationContext)
+        )
+    }
 
     var feedbackDialogVisible by remember { mutableStateOf(false) }
     var feedbackType by remember { mutableStateOf(FeedbackType.BUG) }
@@ -171,102 +140,6 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
         } catch (e: ActivityNotFoundException) {
             Toast.makeText(context, "未找到邮件应用，无法发送反馈", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    fun startCheck() {
-        updateState = UpdateUiState.Checking
-        scope.launch {
-            checker.checkLatest().onSuccess { info ->
-                updateState = if (checker.isNewerVersion(info.tagName)) {
-                    UpdateUiState.Available(info)
-                } else {
-                    UpdateUiState.Latest
-                }
-            }.onFailure {
-                updateState = UpdateUiState.Error("网络无法连接 GitHub")
-            }
-        }
-    }
-
-    fun installOrAskPermission(file: File) {
-        updateState = UpdateUiState.Idle
-        if (downloader.hasInstallPermission()) {
-            downloader.install(file)
-        } else {
-            updateState = UpdateUiState.InstallPermissionNeeded
-        }
-    }
-
-    fun startDownload(info: UpdateInfo) {
-        downloader.findExisting(info.tagName, info.apkSize)?.let { local ->
-            updateState = UpdateUiState.LocalReady(local, info)
-            return
-        }
-        paused = false
-        updateState = UpdateUiState.Downloading(
-            downloaded = 0,
-            total = info.apkSize,
-            speedBytesPerSec = 0,
-            isPaused = false
-        )
-        ticker.lastBytes = 0
-        ticker.lastNanos = 0
-        ticker.lastEmitNanos = 0
-        ticker.speedBytesPerSec = 0
-        downloadJob = scope.launch {
-            downloader.download(
-                url = info.apkUrl,
-                tag = info.tagName,
-                isPaused = { paused },
-                progress = { d, t ->
-                    val now = System.nanoTime()
-                    val dtSec = (now - ticker.lastNanos) / 1_000_000_000.0
-                    if (dtSec > 0.0) {
-                        ticker.speedBytesPerSec =
-                            ((d - ticker.lastBytes) / dtSec).toLong().coerceAtLeast(0L)
-                    }
-                    ticker.lastBytes = d
-                    ticker.lastNanos = now
-                    if (now - ticker.lastEmitNanos >= 200_000_000L || d >= t) {
-                        ticker.lastEmitNanos = now
-                        updateState = UpdateUiState.Downloading(
-                            downloaded = d,
-                            total = t,
-                            speedBytesPerSec = ticker.speedBytesPerSec,
-                            isPaused = false
-                        )
-                    }
-                }
-            ).onSuccess { file ->
-                installOrAskPermission(file)
-            }.onFailure { e ->
-                if (e is CancellationException) {
-                    updateState = UpdateUiState.Idle
-                } else {
-                    updateState = UpdateUiState.Error("下载失败：${e.message}")
-                }
-            }
-        }
-    }
-
-    fun togglePause() {
-        val current = updateState as? UpdateUiState.Downloading ?: return
-        if (paused) {
-            paused = false
-            ticker.lastBytes = current.downloaded
-            ticker.lastNanos = System.nanoTime()
-            ticker.lastEmitNanos = 0
-            ticker.speedBytesPerSec = 0
-        } else {
-            paused = true
-        }
-        updateState = current.copy(isPaused = !current.isPaused)
-    }
-
-    fun cancelDownload() {
-        paused = true
-        downloadJob?.cancel()
-        updateState = UpdateUiState.Idle
     }
 
     Scaffold(
@@ -370,7 +243,7 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                 SettingsRow(
                     title = "检查更新",
                     subtitle = "当前版本 v${UpdateChecker.CURRENT_VERSION}",
-                    onClick = { startCheck() },
+                    onClick = { updateFlow.startCheck() },
                     trailing = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -503,208 +376,5 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
         )
     }
 
-    when (val s = updateState) {
-        UpdateUiState.Idle -> Unit
-
-        UpdateUiState.Checking -> AlertDialog(
-            onDismissRequest = {},
-            title = { Text("检查更新") },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("正在检查更新…")
-                }
-            },
-            confirmButton = {}
-        )
-
-        UpdateUiState.Latest -> AlertDialog(
-            onDismissRequest = { updateState = UpdateUiState.Idle },
-            title = { Text("检查更新") },
-            text = { Text("已是最新版本 v${UpdateChecker.CURRENT_VERSION}") },
-            confirmButton = {
-                TextButton(onClick = { updateState = UpdateUiState.Idle }) { Text("知道了") }
-            }
-        )
-
-        is UpdateUiState.Available -> {
-            val notes = s.info.releaseNotes.trim()
-            Dialog(
-                onDismissRequest = { updateState = UpdateUiState.Idle },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .widthIn(max = 600.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(top = 20.dp, bottom = 12.dp)
-                    ) {
-                        Text(
-                            text = "发现新版本 ${s.info.tagName}",
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(horizontal = 24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "当前版本 v${UpdateChecker.CURRENT_VERSION}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 24.dp)
-                        )
-                        if (notes.isNotBlank()) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-                            )
-                            MarkdownText(
-                                markdown = notes,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier
-                                    .padding(horizontal = 24.dp)
-                                    .heightIn(max = 420.dp)
-                                    .verticalScroll(rememberScrollState())
-                            )
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(end = 16.dp, top = 16.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(onClick = { updateState = UpdateUiState.Idle }) {
-                                Text("稍后")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            TextButton(onClick = { startDownload(s.info) }) {
-                                Text("立即更新")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        is UpdateUiState.Downloading -> {
-            val fraction = if (s.total > 0) {
-                (s.downloaded.toFloat() / s.total.toFloat()).coerceIn(0f, 1f)
-            } else 0f
-            val percent = if (s.total > 0) (s.downloaded * 100 / s.total).toInt() else 0
-            val speedMbPerSec = s.speedBytesPerSec / 1024f / 1024f
-            AlertDialog(
-                onDismissRequest = {},
-                title = { Text("下载更新") },
-                text = {
-                    Column {
-                        LinearProgressIndicator(
-                            progress = { fraction },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (s.total > 0) {
-                                    "已下载 ${formatMb(s.downloaded)} / ${formatMb(s.total)}"
-                                } else {
-                                    "正在下载… ${formatMb(s.downloaded)}"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (s.total > 0) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "$percent%",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = when {
-                                s.isPaused -> "已暂停"
-                                s.speedBytesPerSec > 0 -> String.format("%.2f MB/s", speedMbPerSec)
-                                else -> "0.00 MB/s"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    Row {
-                        TextButton(onClick = { togglePause() }) {
-                            Text(if (s.isPaused) "继续" else "暂停")
-                        }
-                        TextButton(onClick = { cancelDownload() }) {
-                            Text("取消")
-                        }
-                    }
-                }
-            )
-        }
-
-        is UpdateUiState.LocalReady -> AlertDialog(
-            onDismissRequest = { updateState = UpdateUiState.Idle },
-            title = { Text("安装包已下载") },
-            text = {
-                Text(
-                    "${s.info.tagName}（${formatMb(s.file.length())}）已存在于本地，无需重新下载。"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { installOrAskPermission(s.file) }) { Text("直接安装") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { updateState = UpdateUiState.Idle }) {
-                        Text("取消")
-                    }
-                    TextButton(onClick = {
-                        s.file.delete()
-                        startDownload(s.info)
-                    }) { Text("重新下载") }
-                }
-            }
-        )
-
-        UpdateUiState.InstallPermissionNeeded -> AlertDialog(
-            onDismissRequest = { updateState = UpdateUiState.Idle },
-            title = { Text("需要安装权限") },
-            text = { Text("请允许「安装未知应用」权限后再试，否则无法安装更新。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    updateState = UpdateUiState.Idle
-                    downloader.openInstallPermissionSettings()
-                }) { Text("去设置") }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateState = UpdateUiState.Idle }) { Text("取消") }
-            }
-        )
-
-        is UpdateUiState.Error -> AlertDialog(
-            onDismissRequest = { updateState = UpdateUiState.Idle },
-            title = { Text("更新失败") },
-            text = { Text(s.message) },
-            confirmButton = {
-                TextButton(onClick = { startCheck() }) { Text("重试") }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateState = UpdateUiState.Idle }) { Text("返回") }
-            }
-        )
-    }
+    UpdateDialogs(updateFlow)
 }

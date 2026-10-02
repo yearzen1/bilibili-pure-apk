@@ -17,7 +17,7 @@ data class UpdateInfo(
     val releaseNotes: String
 )
 
-class UpdateChecker {
+class UpdateChecker : UpdateSource {
 
     companion object {
         private const val TAG = "BiliPure"
@@ -44,7 +44,7 @@ class UpdateChecker {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun checkLatest(): Result<UpdateInfo> = withContext(Dispatchers.IO) {
+    override suspend fun checkLatest(): Result<UpdateInfo> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url(RELEASE_API)
@@ -70,7 +70,7 @@ class UpdateChecker {
         }
     }
 
-    fun isNewerVersion(latestTag: String): Boolean {
+    override fun isNewerVersion(latestTag: String): Boolean {
         return compareVersions(parseVersion(latestTag), parseVersion(CURRENT_VERSION)) > 0
     }
 

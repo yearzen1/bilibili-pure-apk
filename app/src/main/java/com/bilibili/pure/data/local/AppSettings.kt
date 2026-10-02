@@ -13,6 +13,7 @@ object AppSettings {
     private const val KEY_WIFI_ONLY_PLAYBACK = "wifi_only_playback"
     private const val KEY_WIFI_ONLY_DOWNLOAD = "wifi_only_download"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_UPDATE_PROMPTED_TAG = "update_prompted_tag"
 
     private lateinit var prefs: SharedPreferences
 
@@ -43,6 +44,11 @@ object AppSettings {
     var wifiOnlyDownload: Boolean
         get() = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOAD, true)
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, value).apply()
+
+    /** Release tag of the update prompt the user last dismissed with "稍后". */
+    var updatePromptedTag: String
+        get() = prefs.getString(KEY_UPDATE_PROMPTED_TAG, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_UPDATE_PROMPTED_TAG, value).apply()
 
     fun isWifiConnected(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

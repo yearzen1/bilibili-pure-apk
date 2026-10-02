@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.bilibili.pure.data.local.AppSettings
+import com.bilibili.pure.data.update.UpdateDownloader
 import com.bilibili.pure.ui.channel.ChannelScreen
 import com.bilibili.pure.ui.detail.DetailScreen
 import com.bilibili.pure.ui.detail.NoteScreen
@@ -45,6 +47,9 @@ import com.bilibili.pure.ui.search.SearchScreen
 import com.bilibili.pure.ui.settings.SettingsScreen
 import com.bilibili.pure.ui.theme.BilibiliPureTheme
 import com.bilibili.pure.ui.theme.resolveDarkTheme
+import com.bilibili.pure.ui.update.CheckMode
+import com.bilibili.pure.ui.update.UpdateDialogs
+import com.bilibili.pure.ui.update.UpdateFlowState
 
 class MainActivity : ComponentActivity() {
 
@@ -120,6 +125,18 @@ fun MainScreen(
         Screen.Search.route,
         Screen.Profile.route
     )
+
+    val context = LocalContext.current
+    val updateScope = rememberCoroutineScope()
+    val updateFlow = remember(updateScope) {
+        UpdateFlowState(
+            scope = updateScope,
+            downloader = UpdateDownloader(context.applicationContext)
+        )
+    }
+    LaunchedEffect(Unit) {
+        updateFlow.startCheck(CheckMode.Auto)
+    }
 
     Scaffold(
         bottomBar = {
@@ -318,4 +335,6 @@ fun MainScreen(
             }
         }
     }
+
+    UpdateDialogs(updateFlow)
 }

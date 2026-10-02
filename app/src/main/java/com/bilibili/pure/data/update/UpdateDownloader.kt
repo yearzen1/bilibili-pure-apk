@@ -19,7 +19,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class UpdateDownloader(private val context: Context) {
+class UpdateDownloader(private val context: Context) : UpdateDownloaderApi {
 
     companion object {
         private const val TAG = "BiliPure"
@@ -63,7 +63,7 @@ class UpdateDownloader(private val context: Context) {
      * true the download is suspended in place (connection stays open). Early EOF before the
      * full length is reached is treated as a failure so a truncated APK is never kept.
      */
-    suspend fun download(
+    override suspend fun download(
         url: String,
         tag: String,
         progress: (downloaded: Long, total: Long) -> Unit,
@@ -130,7 +130,7 @@ class UpdateDownloader(private val context: Context) {
      * versionName identify exactly this app and release. A file failing any check is deleted
      * so the caller falls back to a fresh download.
      */
-    fun findExisting(tag: String, expectedSize: Long): File? {
+    override fun findExisting(tag: String, expectedSize: Long): File? {
         val file = targetFile(tag)
         if (!isValidApk(file, expectedSize)) return null
         val info = readArchive(file)
@@ -150,7 +150,7 @@ class UpdateDownloader(private val context: Context) {
         null
     }
 
-    fun install(apkFile: File): Boolean {
+    override fun install(apkFile: File): Boolean {
         return try {
             val uri = FileProvider.getUriForFile(
                 context,
@@ -170,7 +170,7 @@ class UpdateDownloader(private val context: Context) {
     }
 
     /** Whether this app is allowed to install packages from unknown sources. */
-    fun hasInstallPermission(): Boolean {
+    override fun hasInstallPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.packageManager.canRequestPackageInstalls()
         } else {
@@ -179,7 +179,7 @@ class UpdateDownloader(private val context: Context) {
     }
 
     /** Opens the per-app "Install unknown apps" settings page for this app. */
-    fun openInstallPermissionSettings() {
+    override fun openInstallPermissionSettings() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val intent = Intent(
