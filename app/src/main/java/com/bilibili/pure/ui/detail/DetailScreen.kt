@@ -803,6 +803,29 @@ private fun DetailContent(
         derivedStateOf { listState.firstVisibleItemIndex < 4 }
     }
 
+    fun toggleRepliesWithAnchor(rpid: Long) {
+        if (rpid !in expandedReplies) {
+            onToggleReplies(rpid)
+            return
+        }
+        val first = listState.layoutInfo.visibleItemsInfo.firstOrNull()
+        val target = collapseScrollTargetIndex(
+            rpid = rpid,
+            isPinned = pinnedComments.any { it.rpid == rpid },
+            threadChildRpids = replyThreads[rpid]?.items?.map { it.rpid } ?: emptyList(),
+            firstVisibleKey = first?.key,
+            firstVisibleIndex = first?.index ?: 0
+        )
+        if (target == null) {
+            onToggleReplies(rpid)
+        } else {
+            scope.launch {
+                listState.scrollToItem(target)
+                onToggleReplies(rpid)
+            }
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -1110,7 +1133,7 @@ private fun DetailContent(
                                 isPinned = true,
                                 isLiked = comment.action == 1,
                                 isTogglingLike = comment.rpid in togglingLikes,
-                                onToggle = { onToggleReplies(rpid) },
+                                onToggle = { toggleRepliesWithAnchor(rpid) },
                                 onUserClick = onUserClick,
                                 onOpenNote = onOpenNote,
                                 onToggleLike = {
@@ -1137,7 +1160,7 @@ private fun DetailContent(
                             }
                             item(key = "pinned_collapse_$rpid") {
                                 TextButton(
-                                    onClick = { onToggleReplies(rpid) },
+                                    onClick = { toggleRepliesWithAnchor(rpid) },
                                     modifier = Modifier.padding(start = 32.dp)
                                 ) {
                                     Text("收起回复")
@@ -1161,7 +1184,7 @@ private fun DetailContent(
                                 isPinned = false,
                                 isLiked = comment.action == 1,
                                 isTogglingLike = comment.rpid in togglingLikes,
-                                onToggle = { onToggleReplies(rpid) },
+                                onToggle = { toggleRepliesWithAnchor(rpid) },
                                 onUserClick = onUserClick,
                                 onOpenNote = onOpenNote,
                                 onToggleLike = {
@@ -1189,7 +1212,7 @@ private fun DetailContent(
                             }
                             item(key = "collapse_$rpid") {
                                 TextButton(
-                                    onClick = { onToggleReplies(rpid) },
+                                    onClick = { toggleRepliesWithAnchor(rpid) },
                                     modifier = Modifier.padding(start = 32.dp)
                                 ) {
                                     Text("收起回复")
@@ -1246,7 +1269,7 @@ private fun DetailContent(
 
             if (showScrollToComments) {
                 FloatingActionButton(
-                    onClick = { scope.launch { listState.scrollToItem(6) } },
+                    onClick = { scope.launch { listState.scrollToItem(commentsHeaderIndex(ugcSeason != null)) } },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
