@@ -253,6 +253,7 @@ fun DetailScreen(
             isFavorited = uiState.isFavorited,
             favoriteCount = uiState.favoriteCount,
             isTogglingFavorite = uiState.isTogglingFavorite,
+            favStatusLoading = uiState.favStatusLoading,
             onToggleFavorite = { uiState.videoInfo?.let { viewModel.onFavoriteClick(it.aid) } },
             isLoggedIn = uiState.isLoggedIn,
             isFollowed = uiState.isFollowed,
@@ -754,6 +755,7 @@ private fun DetailContent(
     isFavorited: Boolean = false,
     favoriteCount: Long = 0,
     isTogglingFavorite: Boolean = false,
+    favStatusLoading: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     isLoggedIn: Boolean = false,
     isFollowed: Boolean = false,
@@ -926,13 +928,23 @@ private fun DetailContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = onToggleFavorite,
-                            enabled = !isTogglingFavorite
-                        ) {
-                            Icon(
-                                imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                contentDescription = if (isFavorited) "取消收藏" else "收藏",
-                                tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            enabled = favoriteButtonEnabled(
+                                isToggling = isTogglingFavorite,
+                                loading = favStatusLoading
                             )
+                        ) {
+                            if (favStatusLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = if (isFavorited) "取消收藏" else "收藏",
+                                    tint = if (isFavorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         Text(
                             text = formatCount(favoriteCount),

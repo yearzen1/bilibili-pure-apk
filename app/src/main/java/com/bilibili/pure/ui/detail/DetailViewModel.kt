@@ -103,6 +103,7 @@ data class DetailUiState(
     val isFavorited: Boolean = false,
     val favoriteCount: Long = 0,
     val isTogglingFavorite: Boolean = false,
+    val favStatusLoading: Boolean = false,
     val isLoggedIn: Boolean = false,
     val isFollowed: Boolean = false,
     val isTogglingFollow: Boolean = false,
@@ -144,7 +145,8 @@ class DetailViewModel(
         _uiState.value = DetailUiState(
             isLoading = true,
             isLoggedIn = isLoggedIn,
-            followStatusLoading = isLoggedIn
+            followStatusLoading = isLoggedIn,
+            favStatusLoading = isLoggedIn
         )
         val commentsGeneration = startCommentRequest()
 
@@ -161,14 +163,16 @@ class DetailViewModel(
                     if (isLoggedIn) {
                         viewModelScope.launch { checkFollowStatus(info.owner.mid) }
                     }
-                    loadComments(info.aid, _uiState.value.commentSortMode, commentsGeneration)
                     checkFavoured(info.aid)
+                    loadComments(info.aid, _uiState.value.commentSortMode, commentsGeneration)
                 }
                 .onFailure { e ->
                     Log.e(BilibiliApp.TAG, "load detail failed: ${e.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = e.message ?: "加载失败"
+                        error = e.message ?: "加载失败",
+                        followStatusLoading = false,
+                        favStatusLoading = false
                     )
                 }
         }
@@ -178,9 +182,15 @@ class DetailViewModel(
         if (BilibiliApi.loginCookies.isEmpty()) return
         repository.checkFavoured(aid)
             .onSuccess { favoured ->
-                _uiState.value = _uiState.value.copy(isFavorited = favoured)
+                _uiState.value = _uiState.value.copy(
+                    isFavorited = favoured,
+                    favStatusLoading = false
+                )
             }
-            .onFailure { Log.e(BilibiliApp.TAG, "checkFavoured failed", it) }
+            .onFailure {
+                Log.e(BilibiliApp.TAG, "checkFavoured failed", it)
+                _uiState.value = _uiState.value.copy(favStatusLoading = false)
+            }
     }
 
     private suspend fun checkFollowStatus(mid: Long) {
@@ -222,6 +232,7 @@ class DetailViewModel(
     fun onFavoriteClick(aid: Long) {
         val state = _uiState.value
         if (state.isTogglingFavorite) return
+        if (state.favStatusLoading) return
         if (!state.isLoggedIn) return
         if (state.isFavorited) {
             cancelFavorite(aid)
