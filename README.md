@@ -17,14 +17,14 @@
 
 ## 快速开始
 
-环境：JDK 17、Android SDK 34（仓库内已带 `android-sdk/`）。
+环境：JDK 17、Android SDK 34（Platform 34 + Platform-Tools，需自行安装，仓库不附带 SDK）。
 
 ```bash
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Windows 下需先设置 `JAVA_HOME` / `ANDROID_HOME`，完整步骤与常见报错见 [构建与安装](docs/how-to/build-and-install.md)。
+首次构建前需让 Gradle 找到 SDK：在 `local.properties` 写入 `sdk.dir=<你的 SDK 路径>`，或设置环境变量 `ANDROID_HOME`。Windows 下的完整步骤与常见报错见 [构建与安装](docs/how-to/build-and-install.md)。
 
 ## 文档
 

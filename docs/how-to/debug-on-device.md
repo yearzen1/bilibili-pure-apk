@@ -11,7 +11,7 @@ App 已安装到设备，需要抓日志定位崩溃、播放失败、接口报�
 
 ## 常用命令
 
-设 `$adb = ".\android-sdk\platform-tools\adb.exe"` 后按需执行。
+设 `$adb = "adb"`（platform-tools 已加入 PATH）或 `$adb = "$env:ANDROID_HOME\platform-tools\adb.exe"` 后按需执行。
 
 | 目的 | 命令 |
 | --- | --- |
