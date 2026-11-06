@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 object AppSettings {
@@ -14,6 +15,7 @@ object AppSettings {
     private const val KEY_WIFI_ONLY_DOWNLOAD = "wifi_only_download"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_UPDATE_PROMPTED_TAG = "update_prompted_tag"
+    private const val KEY_KEEP_SCREEN_ON = "keep_screen_on_while_playing"
 
     private lateinit var prefs: SharedPreferences
 
@@ -26,9 +28,20 @@ object AppSettings {
             prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOAD, true).apply()
         }
         themeModeState = prefs.getInt(KEY_THEME_MODE, 0)
+        keepScreenOnState = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
     }
 
     private var themeModeState by mutableIntStateOf(0)
+
+    private var keepScreenOnState by mutableStateOf(false)
+
+    /** 播放视频时是否保持屏幕常亮，默认关闭。 */
+    var keepScreenOnWhilePlaying: Boolean
+        get() = keepScreenOnState
+        set(value) {
+            keepScreenOnState = value
+            prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
+        }
 
     var themeMode: Int
         get() = themeModeState

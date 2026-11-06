@@ -73,6 +73,8 @@ fun PlayerScreen(
     val context = LocalContext.current
     var isFullscreen by remember { mutableStateOf(true) }
     var playing by remember { mutableStateOf(false) }
+    var isPlayWhenReady by remember { mutableStateOf(true) }
+    var playbackState by remember { mutableIntStateOf(Player.STATE_IDLE) }
     var lastPreparedCid by remember { mutableStateOf<Long?>(null) }
     var isWifi by remember { mutableStateOf(AppSettings.isWifiConnected(context)) }
 
@@ -126,6 +128,7 @@ fun PlayerScreen(
                         else -> "UNKNOWN"
                     }
                     Log.d(BilibiliApp.TAG, "Player: state=$s")
+                    playbackState = state
 
                     if (state == Player.STATE_ENDED) {
                         val st = vm.uiState.value
@@ -158,6 +161,10 @@ fun PlayerScreen(
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     Log.d(BilibiliApp.TAG, "Player: isPlaying=$isPlaying")
                     playing = isPlaying
+                }
+
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    isPlayWhenReady = playWhenReady
                 }
             })
         }
@@ -310,6 +317,16 @@ fun PlayerScreen(
         }
     }
 
+    val keepScreenOn = shouldKeepScreenOn(
+        enabled = AppSettings.keepScreenOnWhilePlaying,
+        playWhenReady = isPlayWhenReady,
+        playbackState = playbackState
+    )
+
+    LaunchedEffect(keepScreenOn) {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "Player: keepScreenOn=$keepScreenOn")
+    }
+
     if (isFullscreen) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -327,7 +344,8 @@ fun PlayerScreen(
                 onBack = onBack,
                 isPausedByWifi = { pausedByWifi.value },
                 onMobileResumePlayRequested = { confirmMobileResumePlay = true },
-                isWifi = isWifi
+                isWifi = isWifi,
+                keepScreenOn = keepScreenOn
             )
         }
     } else {
@@ -377,7 +395,8 @@ fun PlayerScreen(
                         onBack = onBack,
                         isPausedByWifi = { pausedByWifi.value },
                         onMobileResumePlayRequested = { confirmMobileResumePlay = true },
-                        isWifi = isWifi
+                        isWifi = isWifi,
+                        keepScreenOn = keepScreenOn
                     )
                 }
 
@@ -453,7 +472,8 @@ private fun PlayerContent(
     onBack: () -> Unit = {},
     isPausedByWifi: () -> Boolean = { false },
     onMobileResumePlayRequested: () -> Unit = {},
-    isWifi: Boolean = true
+    isWifi: Boolean = true,
+    keepScreenOn: Boolean = false
 ) {
     val context = LocalContext.current
     val batteryLevel = remember {
@@ -668,6 +688,7 @@ private fun PlayerContent(
                         }
                     },
                     update = {
+                        it.keepScreenOn = keepScreenOn
                         controlBar.update(
                             speedCtl.baseSpeed,
                             uiState.currentQuality,

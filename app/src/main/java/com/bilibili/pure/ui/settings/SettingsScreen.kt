@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.ScreenLockPortrait
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -98,6 +99,7 @@ private fun SettingsRow(
 fun SettingsScreen(onBack: () -> Unit = {}) {
     var wifiOnlyPlayback by remember { mutableStateOf(AppSettings.wifiOnlyPlayback) }
     var wifiOnlyDownload by remember { mutableStateOf(AppSettings.wifiOnlyDownload) }
+    var keepScreenOn by remember { mutableStateOf(AppSettings.keepScreenOnWhilePlaying) }
     val themeMode = AppSettings.themeMode
     var themeDialogVisible by remember { mutableStateOf(false) }
     var themeSelected by remember { mutableStateOf(themeMode) }
@@ -184,6 +186,31 @@ fun SettingsScreen(onBack: () -> Unit = {}) {
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionTitle("播放设置")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(SectionShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                SettingsRow(
+                    title = "播放时屏幕常亮",
+                    subtitle = "开启后播放视频时不自动熄屏，暂停或退出后恢复系统息屏",
+                    leadingIcon = Icons.Outlined.ScreenLockPortrait,
+                    trailing = {
+                        Switch(
+                            checked = keepScreenOn,
+                            onCheckedChange = {
+                                keepScreenOn = it
+                                AppSettings.keepScreenOnWhilePlaying = it
+                            }
                         )
                     }
                 )
