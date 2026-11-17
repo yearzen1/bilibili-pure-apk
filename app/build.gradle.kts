@@ -11,8 +11,8 @@ android {
         applicationId = "com.bilibili.pure"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10724
-        versionName = "1.7.24"
+        versionCode = 10725
+        versionName = "1.7.25"
     }
 
     buildTypes {

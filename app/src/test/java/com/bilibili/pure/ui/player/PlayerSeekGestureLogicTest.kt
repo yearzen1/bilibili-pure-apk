@@ -1,6 +1,8 @@
 package com.bilibili.pure.ui.player
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerSeekGestureLogicTest {
@@ -109,5 +111,15 @@ class PlayerSeekGestureLogicTest {
     @Test
     fun formatSeekTimeClampsNegativeInput() {
         assertEquals("00:00", formatSeekTime(-1_000))
+    }
+
+    @Test
+    fun singleTapShowsControllerWhenHidden() {
+        assertTrue(controllerVisibilityAfterTap(currentlyVisible = false))
+    }
+
+    @Test
+    fun singleTapHidesControllerWhenVisible() {
+        assertFalse(controllerVisibilityAfterTap(currentlyVisible = true))
     }
 }

@@ -670,6 +670,15 @@ private fun PlayerContent(
                                         speedCtl.startOverride()
                                     }
 
+                                    override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                                        // 单击切换控制栏。用 onSingleTapConfirmed 而不是 onSingleTapUp，
+                                        // 双击时不会回调，避免双击快进顺手把进度条闪一下。
+                                        val visible = controllerVisibilityAfterTap(view.isControllerFullyVisible())
+                                        if (visible) view.showController() else view.hideController()
+                                        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "Gesture: singleTap controller -> $visible")
+                                        return true
+                                    }
+
                                     override fun onDoubleTap(e: MotionEvent): Boolean {
                                         val p = exoPlayer as? ExoPlayer ?: return true
                                         val from = p.currentPosition
@@ -719,7 +728,7 @@ private fun PlayerContent(
                                         isVerticalSwipe = isOnLeftEdge || isOnRightEdge
                                         isHorizontalSeek = false
                                         axisLocked = false
-                                        false
+                                        true
                                     }
                                     MotionEvent.ACTION_MOVE -> {
                                         if (speedCtl.isOverrideActive) return@setOnTouchListener true
@@ -801,7 +810,7 @@ private fun PlayerContent(
                                                 return@setOnTouchListener true
                                             }
                                         }
-                                        false
+                                        true
                                     }
                                     MotionEvent.ACTION_UP -> {
                                         if (speedCtl.isOverrideActive) {
@@ -819,7 +828,7 @@ private fun PlayerContent(
                                         }
                                         isVerticalSwipe = false
                                         axisLocked = false
-                                        false
+                                        true
                                     }
                                     MotionEvent.ACTION_CANCEL -> {
                                         if (speedCtl.isOverrideActive) speedCtl.stopOverride()
@@ -829,7 +838,7 @@ private fun PlayerContent(
                                         }
                                         isVerticalSwipe = false
                                         axisLocked = false
-                                        false
+                                        true
                                     }
                                     else -> false
                                 }

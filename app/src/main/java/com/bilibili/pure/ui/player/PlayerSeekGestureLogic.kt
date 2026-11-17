@@ -51,6 +51,12 @@ fun doubleTapTargetMs(positionMs: Long, zone: DoubleTapZone, durationMs: Long): 
     return clampSeekMs(positionMs + offset, durationMs)
 }
 
+/**
+ * 单击视频空白区域后控制栏的目标可见性：隐藏则显示，显示则隐藏。
+ * 双击不走这里，因此双击快进不会切换控制栏。
+ */
+fun controllerVisibilityAfterTap(currentlyVisible: Boolean): Boolean = !currentlyVisible
+
 /** 毫秒格式化为 mm:ss，超过 1 小时用 h:mm:ss。 */
 fun formatSeekTime(ms: Long): String {
     val totalSeconds = (ms.coerceAtLeast(0L)) / 1000
