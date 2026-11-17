@@ -764,7 +764,7 @@ class BilibiliRepository(
             )
             if (!shot.isValid) throw Exception("invalid videoshot data")
             shot
-        }.onFailure { Log.e(BilibiliApp.TAG, "getVideoShot failed", it) }
+        }.onFailure { Log.w(BilibiliApp.TAG, "getVideoShot failed: ${it.message}") }
     }
 
     suspend fun getSubtitleContent(url: String): Result<SubtitleBody> {
