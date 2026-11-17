@@ -45,7 +45,8 @@ data class PlayerUiState(
     val subtitleCues: List<SubtitleCue> = emptyList(),
     val subtitleEnabled: Boolean = false,
     val subtitleOffsetX: Float = 0f,
-    val subtitleOffsetY: Float = 0f
+    val subtitleOffsetY: Float = 0f,
+    val videoShot: VideoShot? = null
 )
 
 class PlayerViewModel(
@@ -65,6 +66,9 @@ class PlayerViewModel(
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private var cachedDashData: DashData? = null
+
+    /** 进度条缩略图按 cid 缓存，切换画质不重复请求。 */
+    private val videoShotCache = mutableMapOf<Long, VideoShot>()
 
     init {
         viewModelScope.launch { repository.flushPendingReports(pendingReportManager) }
@@ -188,6 +192,7 @@ class PlayerViewModel(
                 Log.d(BilibiliApp.TAG, "PlayerVM: resume aid=${info.aid} -> pageCid=${startPage.cid} resumeMs=${resumeMs}")
                 loadPlayUrlDash(bvid, startPage.cid)
                 loadSubtitles(info.aid, startPage.cid)
+                loadVideoShot(info.aid, startPage.cid)
             }
             .onFailure { e ->
                 Log.e(BilibiliApp.TAG, "PlayerVM: load failed", e)
@@ -266,7 +271,8 @@ class PlayerViewModel(
                 subtitleCues = cues,
                 subtitleEnabled = enabled,
                 subtitleOffsetX = savedSub?.offsetX ?: 0f,
-                subtitleOffsetY = savedSub?.offsetY ?: 0f
+                subtitleOffsetY = savedSub?.offsetY ?: 0f,
+                videoShot = null
             )
             Log.d(BilibiliApp.TAG, "selectPage LOCAL result: enabled=$enabled currentSub=${currentSub?.lan} subtitleEnabled=$enabled subTracks=${subTracks.size}")
             return
@@ -283,9 +289,11 @@ class PlayerViewModel(
             currentPage = page,
             resumePositionMs = resumeMs,
             isLoading = true,
-            videoUrl = null
+            videoUrl = null,
+            videoShot = null
         )
         loadPlayUrlDash(bvid, page.cid)
+        loadVideoShot(info.aid, page.cid)
     }
 
     fun selectQuality(quality: QualityOption) {
@@ -401,6 +409,27 @@ class PlayerViewModel(
         }
 
         return videos.minByOrNull { it.id }
+    }
+
+    private fun loadVideoShot(aid: Long, cid: Long) {
+        videoShotCache[cid]?.let { cached ->
+            _uiState.value = _uiState.value.copy(videoShot = cached)
+            return
+        }
+        viewModelScope.launch {
+            repository.getVideoShot(aid, cid)
+                .onSuccess { shot ->
+                    Log.d(BilibiliApp.TAG, "loadVideoShot: aid=$aid cid=$cid ${shot.frameTimesSec.size} frames, ${shot.spriteUrls.size} sheets")
+                    videoShotCache[cid] = shot
+                    if (videoShotCache.size > MAX_VIDEO_SHOT_CACHE) {
+                        videoShotCache.remove(videoShotCache.keys.first())
+                    }
+                    if (_uiState.value.currentPage?.cid == cid) {
+                        _uiState.value = _uiState.value.copy(videoShot = shot)
+                    }
+                }
+                .onFailure { e -> Log.w(BilibiliApp.TAG, "loadVideoShot failed: ${e.message}") }
+        }
     }
 
     private fun loadSubtitles(aid: Long, cid: Long) {
@@ -532,4 +561,8 @@ class PlayerViewModel(
         }
     }
 
+    companion object {
+        /** 最多缓存多少个分 P 的缩略图信息。 */
+        private const val MAX_VIDEO_SHOT_CACHE = 8
+    }
 }

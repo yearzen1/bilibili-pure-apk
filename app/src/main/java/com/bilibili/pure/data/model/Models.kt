@@ -650,3 +650,30 @@ data class SubtitleCue(
     val sid: Int = 0,
     val location: Int = 2
 )
+
+/** `x/player/videoshot` 原始响应。 */
+data class VideoShotRaw(
+    @SerializedName("img_x_len") val imgXLen: Int = 0,
+    @SerializedName("img_y_len") val imgYLen: Int = 0,
+    @SerializedName("img_x_size") val imgXSize: Int = 0,
+    @SerializedName("img_y_size") val imgYSize: Int = 0,
+    val image: List<String> = emptyList(),
+    val index: List<Int> = emptyList()
+)
+
+/** 进度条缩略图雪碧图信息。 */
+data class VideoShot(
+    val spriteUrls: List<String> = emptyList(),
+    val cols: Int = 0,
+    val rows: Int = 0,
+    val tileWidth: Int = 0,
+    val tileHeight: Int = 0,
+    val frameTimesSec: List<Int> = emptyList()
+) {
+    /** 每张雪碧图包含的缩略图数量。 */
+    val perSheet: Int get() = cols * rows
+
+    val isValid: Boolean
+        get() = spriteUrls.isNotEmpty() && cols > 0 && rows > 0 &&
+                tileWidth > 0 && tileHeight > 0 && frameTimesSec.isNotEmpty()
+}

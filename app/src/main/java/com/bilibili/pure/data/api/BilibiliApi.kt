@@ -264,6 +264,13 @@ interface BilibiliApi {
         @Query("cid") cid: Long
     ): ApiResponse<PlayerInfo>
 
+    @GET("x/player/videoshot")
+    suspend fun getVideoShot(
+        @Query("aid") aid: Long,
+        @Query("cid") cid: Long,
+        @Query("index") index: Int = 1
+    ): ApiResponse<VideoShotRaw>
+
     companion object {
         private const val BASE_URL = "https://api.bilibili.com/"
         lateinit var buvid3: String

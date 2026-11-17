@@ -8,6 +8,7 @@ import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowInsetsController
 import android.media.AudioManager
@@ -15,6 +16,7 @@ import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -35,7 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
@@ -50,6 +59,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.TimeBar
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bilibili.pure.BilibiliApp
 import com.bilibili.pure.BuildConfig
@@ -497,6 +507,23 @@ private fun PlayerContent(
     var volumeOverlayValue by remember { mutableStateOf(0.5f) }
     var overlayDismissKey by remember { mutableStateOf(0) }
     var observedPositionMs by remember { mutableLongStateOf(0L) }
+    var seekPreviewVisible by remember { mutableStateOf(false) }
+    var seekPreviewTargetMs by remember { mutableLongStateOf(0L) }
+    var seekPreviewDurationMs by remember { mutableLongStateOf(0L) }
+    var seekPreviewDeltaMs by remember { mutableLongStateOf(0L) }
+    var seekPreviewDismissKey by remember { mutableIntStateOf(0) }
+    var spriteBitmaps by remember { mutableStateOf<Map<String, ImageBitmap>>(emptyMap()) }
+    var timeBarLeftPx by remember { mutableIntStateOf(0) }
+    var timeBarWidthPx by remember { mutableIntStateOf(0) }
+    var containerWidthPx by remember { mutableIntStateOf(0) }
+    val previewWidthPx = with(LocalDensity.current) { 180.dp.roundToPx() }
+
+    val showSeekPreview: (Long, Long, Long) -> Unit = { target, from, duration ->
+        seekPreviewTargetMs = target
+        seekPreviewDurationMs = duration
+        seekPreviewDeltaMs = target - from
+        seekPreviewVisible = true
+    }
 
     LaunchedEffect(player.isPlaying) {
         while (player.isPlaying) {
@@ -520,7 +547,33 @@ private fun PlayerContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    LaunchedEffect(seekPreviewDismissKey) {
+        if (seekPreviewDismissKey > 0) {
+            delay(900)
+            seekPreviewVisible = false
+        }
+    }
+
+    // 进播放页就预取雪碧图，保证第一次拖动即可看到缩略图。
+    LaunchedEffect(uiState.videoShot) {
+        val shot = uiState.videoShot
+        if (shot == null) {
+            spriteBitmaps = emptyMap()
+            return@LaunchedEffect
+        }
+        for (url in shot.spriteUrls) {
+            if (spriteBitmaps.containsKey(url)) continue
+            val bitmap = ThumbnailLoader.load(url) ?: continue
+            spriteBitmaps = spriteBitmaps + (url to bitmap.asImageBitmap())
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { containerWidthPx = it.size.width },
+        contentAlignment = Alignment.Center
+    ) {
         when {
             uiState.isLoading -> {
                 CircularProgressIndicator()
@@ -568,11 +621,46 @@ private fun PlayerContent(
                             })
                             showBackButton = view.isControllerFullyVisible()
 
+                            // 进度条缩略图：记录进度条几何位置，并监听拖动。
+                            val progressId = ctx.resources.getIdentifier("exo_progress", "id", ctx.packageName)
+                            val timeBarView = view.findViewById<View>(progressId)
+                            val updateBarGeometry = {
+                                if (timeBarView != null) {
+                                    val viewLoc = IntArray(2)
+                                    val barLoc = IntArray(2)
+                                    view.getLocationOnScreen(viewLoc)
+                                    timeBarView.getLocationOnScreen(barLoc)
+                                    timeBarLeftPx = barLoc[0] - viewLoc[0]
+                                    timeBarWidthPx = timeBarView.width
+                                }
+                            }
+                            view.post { updateBarGeometry() }
+                            view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                                updateBarGeometry()
+                            }
+                            (timeBarView as? TimeBar)?.addListener(object : TimeBar.OnScrubListener {
+                                override fun onScrubStart(timeBar: TimeBar, position: Long) {
+                                    showSeekPreview(position, position, exoPlayer.duration.coerceAtLeast(0L))
+                                }
+
+                                override fun onScrubMove(timeBar: TimeBar, position: Long) {
+                                    showSeekPreview(position, position, exoPlayer.duration.coerceAtLeast(0L))
+                                }
+
+                                override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
+                                    seekPreviewDismissKey++
+                                }
+                            })
+
                             var touchStartX = 0f
                             var touchStartY = 0f
                             var isOnLeftEdge = false
                             var isOnRightEdge = false
                             var isVerticalSwipe = false
+                            var isHorizontalSeek = false
+                            var axisLocked = false
+                            var seekStartPositionMs = 0L
+                            val touchSlop = ViewConfiguration.get(ctx).scaledTouchSlop.toFloat()
 
                             val gestureDetector = GestureDetector(
                                 ctx,
@@ -584,14 +672,26 @@ private fun PlayerContent(
 
                                     override fun onDoubleTap(e: MotionEvent): Boolean {
                                         val p = exoPlayer as? ExoPlayer ?: return true
-                                        if (p.isPlaying) {
-                                            p.pause()
-                                        } else {
-                                            if (AppSettings.wifiOnlyPlayback && isPausedByWifi() && !AppSettings.isWifiConnected(ctx)) {
-                                                onMobileResumePlayRequested()
+                                        val from = p.currentPosition
+                                        val zone = doubleTapZone(e.x, view.width)
+                                        if (zone == DoubleTapZone.PAUSE) {
+                                            if (p.isPlaying) {
+                                                p.pause()
                                             } else {
-                                                p.play()
+                                                if (AppSettings.wifiOnlyPlayback && isPausedByWifi() && !AppSettings.isWifiConnected(ctx)) {
+                                                    onMobileResumePlayRequested()
+                                                } else {
+                                                    p.play()
+                                                }
                                             }
+                                            return true
+                                        }
+                                        val target = doubleTapTargetMs(from, zone, p.duration)
+                                        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "Gesture: doubleTap x=${e.x.toInt()}/${view.width} zone=$zone from=$from target=$target")
+                                        if (target != from) {
+                                            p.seekTo(target)
+                                            showSeekPreview(target, from, p.duration.coerceAtLeast(0L))
+                                            seekPreviewDismissKey++
                                         }
                                         return true
                                     }
@@ -614,17 +714,49 @@ private fun PlayerContent(
                                         touchStartX = event.x
                                         touchStartY = event.y
                                         val w = view.width
-                                        isOnLeftEdge = w > 0 && event.x < w * 0.3f
-                                        isOnRightEdge = w > 0 && event.x > w * 0.7f
+                                        isOnLeftEdge = w > 0 && event.x < w * EDGE_ZONE_RATIO
+                                        isOnRightEdge = w > 0 && event.x > w * (1f - EDGE_ZONE_RATIO)
                                         isVerticalSwipe = isOnLeftEdge || isOnRightEdge
+                                        isHorizontalSeek = false
+                                        axisLocked = false
                                         false
                                     }
                                     MotionEvent.ACTION_MOVE -> {
                                         if (speedCtl.isOverrideActive) return@setOnTouchListener true
-                                        if (isVerticalSwipe) {
-                                            val dy = kotlin.math.abs(event.y - touchStartY)
-                                            val dx = kotlin.math.abs(event.x - touchStartX)
-                                            if (dy > dx && dy > 5f) {
+                                        val dx = event.x - touchStartX
+                                        val dy = event.y - touchStartY
+                                        if (!axisLocked && (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop)) {
+                                            axisLocked = true
+                                            if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                                                isHorizontalSeek = true
+                                                seekStartPositionMs = exoPlayer.currentPosition
+                                                showSeekPreview(
+                                                    seekStartPositionMs,
+                                                    seekStartPositionMs,
+                                                    exoPlayer.duration.coerceAtLeast(0L)
+                                                )
+                                                if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "Gesture: horizontal seek start at ${seekStartPositionMs}ms")
+                                                if (view.isControllerFullyVisible()) {
+                                                    view.hideController()
+                                                }
+                                            }
+                                        }
+                                        if (isHorizontalSeek) {
+                                            val target = clampSeekMs(
+                                                seekStartPositionMs + seekDeltaMs(dx, view.width),
+                                                exoPlayer.duration
+                                            )
+                                            showSeekPreview(
+                                                target,
+                                                seekStartPositionMs,
+                                                exoPlayer.duration.coerceAtLeast(0L)
+                                            )
+                                            return@setOnTouchListener true
+                                        }
+                                        if (isVerticalSwipe && axisLocked) {
+                                            val ady = kotlin.math.abs(dy)
+                                            val adx = kotlin.math.abs(dx)
+                                            if (ady > adx && ady > 5f) {
                                                 if (isOnLeftEdge && !showBrightnessOverlay) {
                                                     showBrightnessOverlay = true
                                                     val activity = ctx as? Activity
@@ -676,10 +808,27 @@ private fun PlayerContent(
                                             speedCtl.stopOverride()
                                             showSpeedToast = true
                                         }
+                                        if (isHorizontalSeek) {
+                                            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "Gesture: seek commit to ${seekPreviewTargetMs}ms")
+                                            exoPlayer.seekTo(seekPreviewTargetMs)
+                                            isHorizontalSeek = false
+                                            seekPreviewDismissKey++
+                                        }
                                         if (showBrightnessOverlay || showVolumeOverlay) {
                                             overlayDismissKey++
                                         }
                                         isVerticalSwipe = false
+                                        axisLocked = false
+                                        false
+                                    }
+                                    MotionEvent.ACTION_CANCEL -> {
+                                        if (speedCtl.isOverrideActive) speedCtl.stopOverride()
+                                        if (isHorizontalSeek) {
+                                            isHorizontalSeek = false
+                                            seekPreviewVisible = false
+                                        }
+                                        isVerticalSwipe = false
+                                        axisLocked = false
                                         false
                                     }
                                     else -> false
@@ -784,6 +933,80 @@ private fun PlayerContent(
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium
                 )
+            }
+        }
+
+        if (seekPreviewVisible) {
+            val shot = uiState.videoShot
+            val frameSec = (seekPreviewTargetMs / 1000L).toInt()
+            val frameIndex = shot?.let { frameIndexFor(it.frameTimesSec, frameSec) } ?: 0
+            val sheetUrl = shot?.let { it.spriteUrls.getOrNull(frameIndex / it.perSheet) }
+            val sheetBitmap = sheetUrl?.let { spriteBitmaps[it] }
+            val tile = if (shot != null && sheetBitmap != null) {
+                tileSliceFor(
+                    frameIndex = frameIndex,
+                    cols = shot.cols,
+                    rows = shot.rows,
+                    tileWidth = shot.tileWidth,
+                    tileHeight = shot.tileHeight,
+                    bitmapWidth = sheetBitmap.width,
+                    bitmapHeight = sheetBitmap.height
+                )
+            } else {
+                null
+            }
+            val centerX = previewCenterXPx(
+                targetMs = seekPreviewTargetMs,
+                durationMs = seekPreviewDurationMs,
+                barLeftPx = timeBarLeftPx,
+                barWidthPx = timeBarWidthPx,
+                previewWidthPx = previewWidthPx,
+                containerWidthPx = containerWidthPx
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 88.dp)
+                    .offset { IntOffset(centerX - containerWidthPx / 2, 0) }
+                    .width(180.dp)
+                    .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
+                    .padding(4.dp)
+            ) {
+                if (tile != null && sheetBitmap != null) {
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(tile.srcWidth.toFloat() / tile.srcHeight.toFloat())
+                            .clip(RoundedCornerShape(4.dp))
+                    ) {
+                        drawImage(
+                            image = sheetBitmap,
+                            srcOffset = IntOffset(tile.srcLeft, tile.srcTop),
+                            srcSize = IntSize(tile.srcWidth, tile.srcHeight),
+                            dstOffset = IntOffset.Zero,
+                            dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                            filterQuality = FilterQuality.Medium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Text(
+                    text = "${formatSeekTime(seekPreviewTargetMs)} / ${formatSeekTime(seekPreviewDurationMs)}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                if (seekPreviewDeltaMs != 0L) {
+                    Text(
+                        text = if (seekPreviewDeltaMs > 0) {
+                            "+${seekPreviewDeltaMs / 1000}s"
+                        } else {
+                            "-${-seekPreviewDeltaMs / 1000}s"
+                        },
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
 

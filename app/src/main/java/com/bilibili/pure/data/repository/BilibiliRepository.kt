@@ -745,6 +745,28 @@ class BilibiliRepository(
         }.onFailure { Log.e(BilibiliApp.TAG, "getSubtitleTracks failed", it) }
     }
 
+    /** 拉取进度条缩略图雪碧图信息；失败或数据不完整时返回失败，由调用方静默降级。 */
+    suspend fun getVideoShot(aid: Long, cid: Long): Result<VideoShot> {
+        if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getVideoShot: aid=$aid cid=$cid")
+        return runCatching {
+            val response = api.getVideoShot(aid = aid, cid = cid)
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getVideoShot response: code=${response.code}")
+            if (response.code != 0) throw Exception(response.message)
+            val raw = response.data ?: throw Exception("empty data")
+            if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getVideoShot raw: grid=${raw.imgXLen}x${raw.imgYLen} tile=${raw.imgXSize}x${raw.imgYSize} sheets=${raw.image.size} frames=${raw.index.size}")
+            val shot = VideoShot(
+                spriteUrls = raw.image.map { url -> if (url.startsWith("//")) "https:$url" else url },
+                cols = raw.imgXLen,
+                rows = raw.imgYLen,
+                tileWidth = raw.imgXSize,
+                tileHeight = raw.imgYSize,
+                frameTimesSec = raw.index
+            )
+            if (!shot.isValid) throw Exception("invalid videoshot data")
+            shot
+        }.onFailure { Log.e(BilibiliApp.TAG, "getVideoShot failed", it) }
+    }
+
     suspend fun getSubtitleContent(url: String): Result<SubtitleBody> {
         if (BuildConfig.DEBUG) Log.d(BilibiliApp.TAG, "getSubtitleContent: url=${url.take(80)}")
         return runCatching {
